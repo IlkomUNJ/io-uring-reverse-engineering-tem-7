@@ -14,5 +14,6 @@ Score is mainly calculated from individual contributions made to the commit. The
 - [Task 4](/function_documentation.md)
 
 ## Team Members
-- Member A
-- Member B
+- Hylmi Akhdan (1313623036)
+- Farrell Shann Deandra (1313623067)
+- Hezekhia Oshea Christian (13136230)
