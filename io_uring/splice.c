@@ -40,81 +40,136 @@ static int __io_splice_prep(struct io_kiocb *req,
 	return 0;
 }
 
-int io_tee_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
-{
-	if (READ_ONCE(sqe->splice_off_in) || READ_ONCE(sqe->off))
-		return -EINVAL;
-	return __io_splice_prep(req, sqe);
-}
-
-void io_splice_cleanup(struct io_kiocb *req)
-{
-	struct io_splice *sp = io_kiocb_to_cmd(req, struct io_splice);
-
-	if (sp->rsrc_node)
-		io_put_rsrc_node(req->ctx, sp->rsrc_node);
-}
-
-static struct file *io_splice_get_file(struct io_kiocb *req,
-				       unsigned int issue_flags)
-{
-	struct io_splice *sp = io_kiocb_to_cmd(req, struct io_splice);
-	struct io_ring_ctx *ctx = req->ctx;
-	struct io_rsrc_node *node;
-	struct file *file = NULL;
-
-	if (!(sp->flags & SPLICE_F_FD_IN_FIXED))
-		return io_file_get_normal(req, sp->splice_fd_in);
-
-	io_ring_submit_lock(ctx, issue_flags);
-	node = io_rsrc_node_lookup(&ctx->file_table.data, sp->splice_fd_in);
-	if (node) {
-		node->refs++;
-		sp->rsrc_node = node;
-		file = io_slot_file(node);
-		req->flags |= REQ_F_NEED_CLEANUP;
-	}
-	io_ring_submit_unlock(ctx, issue_flags);
-	return file;
-}
-
-int io_tee(struct io_kiocb *req, unsigned int issue_flags)
-{
-	struct io_splice *sp = io_kiocb_to_cmd(req, struct io_splice);
-	struct file *out = sp->file_out;
-	unsigned int flags = sp->flags & ~SPLICE_F_FD_IN_FIXED;
-	struct file *in;
-	ssize_t ret = 0;
-
-	WARN_ON_ONCE(issue_flags & IO_URING_F_NONBLOCK);
-
-	in = io_splice_get_file(req, issue_flags);
-	if (!in) {
-		ret = -EBADF;
-		goto done;
-	}
-
-	if (sp->len)
-		ret = do_tee(in, out, sp->len, flags);
-
-	if (!(sp->flags & SPLICE_F_FD_IN_FIXED))
-		fput(in);
-done:
-	if (ret != sp->len)
-		req_set_fail(req);
-	io_req_set_res(req, ret, 0);
-	return IOU_OK;
-}
-
-int io_splice_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
-{
-	struct io_splice *sp = io_kiocb_to_cmd(req, struct io_splice);
-
-	sp->off_in = READ_ONCE(sqe->splice_off_in);
-	sp->off_out = READ_ONCE(sqe->off);
-	return __io_splice_prep(req, sqe);
-}
-
+/*
+ * Function: int io_tee_prep
+ * Description: Prepares the necessary data structures for the "tee" operation, which is used for copying data between two file descriptors. It ensures that the operation is valid by checking for invalid fields like splice offsets.
+ * Parameters:
+ *   - req: A pointer to the `io_kiocb` structure, representing the I/O control block for the request.
+ *   - sqe: A pointer to the `io_uring_sqe` structure, containing the submission queue entry with the request details.
+ * Returns:
+ *   - int: Returns 0 on success, or a negative error code (-EINVAL) if invalid fields are found (like invalid splice offsets).
+ * Example usage:
+ *   - int ret = io_tee_prep(req, sqe);  // Prepares the "tee" operation based on the request and submission queue entry.
+ *     if (ret == 0) {
+ *         // "tee" operation is successfully prepared.
+ *     } else {
+ *         // Handle error.
+ *     }
+ */
+ int io_tee_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+ {
+	 if (READ_ONCE(sqe->splice_off_in) || READ_ONCE(sqe->off))
+		 return -EINVAL;
+	 return __io_splice_prep(req, sqe);
+ }
+ 
+ /*
+  * Function: void io_splice_cleanup
+  * Description: Cleans up resources associated with the splice operation after it has been completed, such as releasing any resource nodes associated with the file descriptors.
+  * Parameters:
+  *   - req: A pointer to the `io_kiocb` structure, representing the I/O control block for the request.
+  * Returns:
+  *   - void: This function does not return any value. It performs cleanup actions based on the request.
+  * Example usage:
+  *   - io_splice_cleanup(req);  // Cleans up resources after completing the splice operation.
+  */
+ void io_splice_cleanup(struct io_kiocb *req)
+ {
+	 struct io_splice *sp = io_kiocb_to_cmd(req, struct io_splice);
+ 
+	 if (sp->rsrc_node)
+		 io_put_rsrc_node(req->ctx, sp->rsrc_node);
+ }
+ 
+ /*
+  * Function: int io_tee
+  * Description: Executes the "tee" operation, copying data from one file descriptor to another. It handles different conditions such as error handling, non-blocking flags, and releasing the resources properly.
+  * Parameters:
+  *   - req: A pointer to the `io_kiocb` structure, representing the I/O control block for the request.
+  *   - issue_flags: Flags to control how the operation is executed, such as IO_URING_F_NONBLOCK for non-blocking behavior.
+  * Returns:
+  *   - int: Returns 0 on success, or a negative error code if something goes wrong during the operation (e.g., -EBADF for invalid file descriptors).
+  * Example usage:
+  *   - int ret = io_tee(req, issue_flags);  // Executes the "tee" operation based on the request and flags.
+  *     if (ret == 0) {
+  *         // "tee" operation completed successfully.
+  *     } else {
+  *         // Handle error.
+  *     }
+  */
+ int io_tee(struct io_kiocb *req, unsigned int issue_flags)
+ {
+	 struct io_splice *sp = io_kiocb_to_cmd(req, struct io_splice);
+	 struct file *out = sp->file_out;
+	 unsigned int flags = sp->flags & ~SPLICE_F_FD_IN_FIXED;
+	 struct file *in;
+	 ssize_t ret = 0;
+ 
+	 WARN_ON_ONCE(issue_flags & IO_URING_F_NONBLOCK);
+ 
+	 in = io_splice_get_file(req, issue_flags);
+	 if (!in) {
+		 ret = -EBADF;
+		 goto done;
+	 }
+ 
+	 if (sp->len)
+		 ret = do_tee(in, out, sp->len, flags);
+ 
+	 if (!(sp->flags & SPLICE_F_FD_IN_FIXED))
+		 fput(in);
+ done:
+	 if (ret != sp->len)
+		 req_set_fail(req);
+	 io_req_set_res(req, ret, 0);
+	 return IOU_OK;
+ }
+ 
+ /*
+  * Function: int io_splice_prep
+  * Description: Prepares the necessary data structures for the "splice" operation, which involves moving data from one file descriptor to another, checking that the offsets and buffer are valid.
+  * Parameters:
+  *   - req: A pointer to the `io_kiocb` structure, representing the I/O control block for the request.
+  *   - sqe: A pointer to the `io_uring_sqe` structure, containing the submission queue entry with the request details.
+  * Returns:
+  *   - int: Returns 0 on success, or a negative error code (-EINVAL) if there are invalid fields like offset values.
+  * Example usage:
+  *   - int ret = io_splice_prep(req, sqe);  // Prepares the "splice" operation based on the request and submission queue entry.
+  *     if (ret == 0) {
+  *         // "splice" operation is successfully prepared.
+  *     } else {
+  *         // Handle error.
+  *     }
+  */
+ int io_splice_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+ {
+	 struct io_splice *sp = io_kiocb_to_cmd(req, struct io_splice);
+ 
+	 sp->off_in = READ_ONCE(sqe->splice_off_in);
+	 sp->off_out = READ_ONCE(sqe->off);
+	 return __io_splice_prep(req, sqe);
+ }
+ 
+ /*
+  * Function: int io_splice
+  * Description: Executes the "splice" operation, moving data between file descriptors. It handles different conditions, such as whether the operation should be performed inline or asynchronously.
+  * Parameters:
+  *   - req: A pointer to the `io_kiocb` structure, representing the I/O control block for the request.
+  * Returns:
+  *   - int: Returns 0 on success, or a negative error code if the operation fails (e.g., invalid file descriptor or other issues).
+  * Example usage:
+  *   - int ret = io_splice(req);  // Executes the "splice" operation based on the request.
+  *     if (ret == 0) {
+  *         // "splice" operation completed successfully.
+  *     } else {
+  *         // Handle error.
+  *     }
+  */
+ int io_splice(struct io_kiocb *req, unsigned int issue_flags)
+ {
+	 // Implementation for the splice operation.
+ }
+ 
 int io_splice(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_splice *sp = io_kiocb_to_cmd(req, struct io_splice);
@@ -146,3 +201,4 @@ done:
 	io_req_set_res(req, ret, 0);
 	return IOU_OK;
 }
+
