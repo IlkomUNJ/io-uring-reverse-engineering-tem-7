@@ -87,28 +87,45 @@ enum {
 	IO_REGION_F_SINGLE_REF			= 4,
 };
 
+
+/*
+ * Function: void io_free_region
+ * Description: This function frees the memory resources associated with an I/O mapped region. It checks the region flags to determine whether the memory is user-provided or kernel-allocated and handles freeing appropriately.
+ * Parameters:
+ *   - ctx: A pointer to the `io_ring_ctx` structure, representing the I/O ring context.
+ *   - mr: A pointer to the `io_mapped_region` structure, representing the mapped region to be freed.
+ * Returns:
+ *   - This function returns `void` and does not return any value.
+ * Example usage:
+ *   - This function is called when cleaning up the resources associated with an I/O region:
+ *     ```
+ *     io_free_region(ctx, mr);
+ *     ```
+ *     Here, `ctx` is the I/O ring context and `mr` is the mapped region to be freed.
+ */
 void io_free_region(struct io_ring_ctx *ctx, struct io_mapped_region *mr)
 {
-	if (mr->pages) {
-		long nr_refs = mr->nr_pages;
+    if (mr->pages) {
+        long nr_refs = mr->nr_pages;
 
-		if (mr->flags & IO_REGION_F_SINGLE_REF)
-			nr_refs = 1;
+        if (mr->flags & IO_REGION_F_SINGLE_REF)
+            nr_refs = 1;
 
-		if (mr->flags & IO_REGION_F_USER_PROVIDED)
-			unpin_user_pages(mr->pages, nr_refs);
-		else
-			release_pages(mr->pages, nr_refs);
+        if (mr->flags & IO_REGION_F_USER_PROVIDED)
+            unpin_user_pages(mr->pages, nr_refs);
+        else
+            release_pages(mr->pages, nr_refs);
 
-		kvfree(mr->pages);
-	}
-	if ((mr->flags & IO_REGION_F_VMAP) && mr->ptr)
-		vunmap(mr->ptr);
-	if (mr->nr_pages && ctx->user)
-		__io_unaccount_mem(ctx->user, mr->nr_pages);
+        kvfree(mr->pages);
+    }
+    if ((mr->flags & IO_REGION_F_VMAP) && mr->ptr)
+        vunmap(mr->ptr);
+    if (mr->nr_pages && ctx->user)
+        __io_unaccount_mem(ctx->user, mr->nr_pages);
 
-	memset(mr, 0, sizeof(*mr));
+    memset(mr, 0, sizeof(*mr));
 }
+
 
 static int io_region_init_ptr(struct io_mapped_region *mr)
 {
@@ -315,31 +332,49 @@ static int io_region_mmap(struct io_ring_ctx *ctx,
 	return vm_insert_pages(vma, vma->vm_start, mr->pages, &nr_pages);
 }
 
-__cold int io_uring_mmap(struct file *file, struct vm_area_struct *vma)
-{
-	struct io_ring_ctx *ctx = file->private_data;
-	size_t sz = vma->vm_end - vma->vm_start;
-	long offset = vma->vm_pgoff << PAGE_SHIFT;
-	unsigned int page_limit = UINT_MAX;
-	struct io_mapped_region *region;
-	void *ptr;
-
-	guard(mutex)(&ctx->mmap_lock);
-
-	ptr = io_uring_validate_mmap_request(file, vma->vm_pgoff, sz);
-	if (IS_ERR(ptr))
-		return PTR_ERR(ptr);
-
-	switch (offset & IORING_OFF_MMAP_MASK) {
-	case IORING_OFF_SQ_RING:
-	case IORING_OFF_CQ_RING:
-		page_limit = (sz + PAGE_SIZE - 1) >> PAGE_SHIFT;
-		break;
-	}
-
-	region = io_mmap_get_region(ctx, vma->vm_pgoff);
-	return io_region_mmap(ctx, region, vma, page_limit);
-}
+__cold 
+/*
+ * Function: int io_uring_mmap
+ * Description: This function handles memory-mapped I/O requests for the I/O ring. It validates the memory mapping request, identifies the appropriate region, and ensures that the correct number of pages are mapped. The function also takes into account any special aliasing requirements on certain architectures.
+ * Parameters:
+ *   - file: A pointer to the `file` structure that represents the file associated with the I/O ring.
+ *   - vma: A pointer to the `vm_area_struct` structure, which contains information about the memory region to be mapped, including the start and end addresses, page offset, and other properties.
+ * Returns:
+ *   - `0` if the memory mapping was successful.
+ *   - A negative error code (e.g., `-EINVAL`, `-ENOMEM`) if there was a failure during memory mapping.
+ * Example usage:
+ *   - This function is used when handling memory mapping requests for an I/O ring:
+ *     ```
+ *     int ret = io_uring_mmap(file, vma);
+ *     ```
+ *     Here, `file` is the I/O ring file and `vma` is the memory area structure describing the mapping request.
+ */
+ int io_uring_mmap(struct file *file, struct vm_area_struct *vma)
+ {
+	 struct io_ring_ctx *ctx = file->private_data;
+	 size_t sz = vma->vm_end - vma->vm_start;
+	 long offset = vma->vm_pgoff << PAGE_SHIFT;
+	 unsigned int page_limit = UINT_MAX;
+	 struct io_mapped_region *region;
+	 void *ptr;
+ 
+	 guard(mutex)(&ctx->mmap_lock);
+ 
+	 ptr = io_uring_validate_mmap_request(file, vma->vm_pgoff, sz);
+	 if (IS_ERR(ptr))
+		 return PTR_ERR(ptr);
+ 
+	 switch (offset & IORING_OFF_MMAP_MASK) {
+	 case IORING_OFF_SQ_RING:
+	 case IORING_OFF_CQ_RING:
+		 page_limit = (sz + PAGE_SIZE - 1) >> PAGE_SHIFT;
+		 break;
+	 }
+ 
+	 region = io_mmap_get_region(ctx, vma->vm_pgoff);
+	 return io_region_mmap(ctx, region, vma, page_limit);
+ }
+ 
 
 unsigned long io_uring_get_unmapped_area(struct file *filp, unsigned long addr,
 					 unsigned long len, unsigned long pgoff,
@@ -416,3 +451,4 @@ unsigned long io_uring_get_unmapped_area(struct file *file, unsigned long addr,
 }
 
 #endif /* !CONFIG_MMU */
+
