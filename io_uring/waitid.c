@@ -242,27 +242,54 @@ static int io_waitid_wait(struct wait_queue_entry *wait, unsigned mode,
 	return 1;
 }
 
-int io_waitid_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
-{
-	struct io_waitid *iw = io_kiocb_to_cmd(req, struct io_waitid);
-	struct io_waitid_async *iwa;
-
-	if (sqe->addr || sqe->buf_index || sqe->addr3 || sqe->waitid_flags)
-		return -EINVAL;
-
-	iwa = io_uring_alloc_async_data(NULL, req);
-	if (!unlikely(iwa))
-		return -ENOMEM;
-	iwa->req = req;
-
-	iw->which = READ_ONCE(sqe->len);
-	iw->upid = READ_ONCE(sqe->fd);
-	iw->options = READ_ONCE(sqe->file_index);
-	iw->infop = u64_to_user_ptr(READ_ONCE(sqe->addr2));
-	return 0;
-}
-
-int io_waitid(struct io_kiocb *req, unsigned int issue_flags)
+/*
+ * Function: int io_waitid_prep
+ * Description: Fungsi ini digunakan untuk menyiapkan perintah I/O untuk menunggu identitas proses tertentu. 
+ *              Fungsi ini memeriksa parameter yang diberikan oleh pengguna dan mempersiapkan data yang diperlukan 
+ *              untuk eksekusi perintah I/O tersebut.
+ * Parameters:
+ *   - req (struct io_kiocb*): Pointer ke struktur kontrol I/O yang mewakili permintaan I/O.
+ *   - sqe (const struct io_uring_sqe*): Pointer ke struktur yang berisi data permintaan I/O yang diterima dari pengguna.
+ * Returns:
+ *   - int: Mengembalikan 0 jika berhasil menyiapkan perintah, atau -EINVAL jika ada parameter yang tidak valid.
+ * Example usage:
+ *   - int ret = io_waitid_prep(req, sqe);
+ */
+ int io_waitid_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+ {
+	 struct io_waitid *iw = io_kiocb_to_cmd(req, struct io_waitid);
+	 struct io_waitid_async *iwa;
+ 
+	 if (sqe->addr || sqe->buf_index || sqe->addr3 || sqe->waitid_flags)
+		 return -EINVAL;
+ 
+	 iwa = io_uring_alloc_async_data(NULL, req);
+	 if (!unlikely(iwa))
+		 return -ENOMEM;
+	 iwa->req = req;
+ 
+	 iw->which = READ_ONCE(sqe->len);
+	 iw->upid = READ_ONCE(sqe->fd);
+	 iw->options = READ_ONCE(sqe->file_index);
+	 iw->infop = u64_to_user_ptr(READ_ONCE(sqe->addr2));
+	 return 0;
+ }
+ 
+ 
+ /*
+  * Function: int io_waitid
+  * Description: Fungsi ini digunakan untuk menunggu identitas proses tertentu dan mengembalikan hasilnya 
+  *              ke aplikasi pengguna. Ini akan memblokir hingga kondisi yang diinginkan terpenuhi atau 
+  *              batas waktu tercapai.
+  * Parameters:
+  *   - req (struct io_kiocb*): Pointer ke struktur kontrol I/O yang mewakili permintaan I/O.
+  *   - issue_flags (unsigned int): Flag yang menunjukkan opsi terkait operasi.
+  * Returns:
+  *   - int: Mengembalikan status operasi, seperti -EBADF jika terjadi kesalahan atau 0 jika berhasil.
+  * Example usage:
+  *   - int ret = io_waitid(req, issue_flags);
+  */
+ int io_waitid(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_waitid *iw = io_kiocb_to_cmd(req, struct io_waitid);
 	struct io_waitid_async *iwa = req->async_data;
@@ -325,3 +352,4 @@ done:
 	io_req_set_res(req, ret, 0);
 	return IOU_OK;
 }
+
