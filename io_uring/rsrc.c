@@ -35,53 +35,116 @@ static struct io_rsrc_node *io_sqe_buffer_register(struct io_ring_ctx *ctx,
 
 #define IO_CACHED_BVECS_SEGS	32
 
-int __io_account_mem(struct user_struct *user, unsigned long nr_pages)
-{
-	unsigned long page_limit, cur_pages, new_pages;
 
-	if (!nr_pages)
-		return 0;
-
-	/* Don't allow more pages than we can safely lock */
-	page_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
-
-	cur_pages = atomic_long_read(&user->locked_vm);
-	do {
-		new_pages = cur_pages + nr_pages;
-		if (new_pages > page_limit)
-			return -ENOMEM;
-	} while (!atomic_long_try_cmpxchg(&user->locked_vm,
-					  &cur_pages, new_pages));
-	return 0;
-}
-
-static void io_unaccount_mem(struct io_ring_ctx *ctx, unsigned long nr_pages)
-{
-	if (ctx->user)
-		__io_unaccount_mem(ctx->user, nr_pages);
-
-	if (ctx->mm_account)
-		atomic64_sub(nr_pages, &ctx->mm_account->pinned_vm);
-}
-
-static int io_account_mem(struct io_ring_ctx *ctx, unsigned long nr_pages)
-{
-	int ret;
-
-	if (ctx->user) {
-		ret = __io_account_mem(ctx->user, nr_pages);
-		if (ret)
-			return ret;
-	}
-
-	if (ctx->mm_account)
-		atomic64_add(nr_pages, &ctx->mm_account->pinned_vm);
-
-	return 0;
-}
-
-int io_buffer_validate(struct iovec *iov)
-{
+/*
+ * Function: int __io_account_mem
+ * Description: This function is used to account for memory used by a specific user in the context of I/O ring operations. It checks if the memory usage exceeds the allowed limit, which is determined by the system's memory lock limit (RLIMIT_MEMLOCK). If the user is trying to use more memory than allowed, it returns an error. If the user can safely allocate the requested memory pages, the function updates the memory usage count.
+ * Parameters:
+ *   - user: A pointer to the `user_struct` that represents the user. This structure holds the current memory usage of the user.
+ *   - nr_pages: The number of memory pages the user is attempting to allocate.
+ * Returns:
+ *   - `0` if the memory allocation is successful and within the allowed limits.
+ *   - `-ENOMEM` if the user exceeds the memory lock limit.
+ * Example usage:
+ *   - int result = __io_account_mem(user, 10);  // Attempts to allocate 10 pages of memory.
+ *     if (result == 0) {
+ *         // Memory allocation was successful.
+ *     } else {
+ *         // Memory allocation failed due to limit.
+ *     }
+ */
+ int __io_account_mem(struct user_struct *user, unsigned long nr_pages)
+ {
+	 unsigned long page_limit, cur_pages, new_pages;
+ 
+	 if (!nr_pages)
+		 return 0;
+ 
+	 /* Don't allow more pages than we can safely lock */
+	 page_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
+ 
+	 cur_pages = atomic_long_read(&user->locked_vm);
+	 do {
+		 new_pages = cur_pages + nr_pages;
+		 if (new_pages > page_limit)
+			 return -ENOMEM;
+	 } while (!atomic_long_try_cmpxchg(&user->locked_vm,
+					   &cur_pages, new_pages));
+	 return 0;
+ }
+ 
+ /*
+  * Function: io_unaccount_mem
+  * Description: This function is used to unaccount memory used by a specific user or memory region in the I/O ring context. It decreases the memory account of the user or the memory manager (`mm_account`). This is useful when releasing or deallocating memory that was previously accounted for.
+  * Parameters:
+  *   - ctx: A pointer to the `io_ring_ctx` structure, which represents the I/O ring context. It holds information about the user and memory manager.
+  *   - nr_pages: The number of memory pages to be unaccounted (freed).
+  * Returns:
+  *   - This function does not return any value, but it updates the memory accounting for the user and memory manager.
+  * Example usage:
+  *   - io_unaccount_mem(ctx, 10);  // Decreases the memory count by 10 pages in the I/O ring context.
+  */
+ static void io_unaccount_mem(struct io_ring_ctx *ctx, unsigned long nr_pages)
+ {
+	 if (ctx->user)
+		 __io_unaccount_mem(ctx->user, nr_pages);
+ 
+	 if (ctx->mm_account)
+		 atomic64_sub(nr_pages, &ctx->mm_account->pinned_vm);
+ }
+ 
+ /*
+  * Function: io_account_mem
+  * Description: This function is used to account for memory in the I/O ring context. It checks if the memory allocation can be successfully accounted for by calling the `__io_account_mem` function. If the user structure exists, it calls `__io_account_mem` to account for the requested memory pages. It also updates the memory manager's memory accounting if `mm_account` is present.
+  * Parameters:
+  *   - ctx: A pointer to the `io_ring_ctx` structure, which represents the I/O ring context.
+  *   - nr_pages: The number of memory pages to be accounted.
+  * Returns:
+  *   - `0` if the memory is successfully accounted for.
+  *   - `-ENOMEM` if the memory allocation fails due to exceeding the limits.
+  * Example usage:
+  *   - int result = io_account_mem(ctx, 5);  // Attempts to account for 5 pages of memory in the I/O ring context.
+  *     if (result == 0) {
+  *         // Memory accounted successfully.
+  *     } else {
+  *         // Memory accounting failed.
+  *     }
+  */
+ static int io_account_mem(struct io_ring_ctx *ctx, unsigned long nr_pages)
+ {
+	 int ret;
+ 
+	 if (ctx->user) {
+		 ret = __io_account_mem(ctx->user, nr_pages);
+		 if (ret)
+			 return ret;
+	 }
+ 
+	 if (ctx->mm_account)
+		 atomic64_add(nr_pages, &ctx->mm_account->pinned_vm);
+ 
+	 return 0;
+ }
+ 
+ /*
+  * Function: int io_buffer_validate
+  * Description: This function validates a buffer structure (`iovec`) used for I/O operations in the context of an I/O ring. It checks the integrity and validity of the provided buffer, ensuring it can be safely used for memory operations.
+  * Parameters:
+  *   - iov: A pointer to the `iovec` structure, which represents a buffer used for I/O operations. It contains the buffer's address and length.
+  * Returns:
+  *   - `0` if the buffer is valid.
+  *   - `-EINVAL` if the buffer is invalid.
+  * Example usage:
+  *   - int result = io_buffer_validate(&iov);  // Validates the provided buffer.
+  *     if (result == 0) {
+  *         // Buffer is valid.
+  *     } else {
+  *         // Buffer is invalid.
+  *     }
+  */
+ int io_buffer_validate(struct iovec *iov)
+ {
+ 
 	unsigned long tmp, acct_len = iov->iov_len + (PAGE_SIZE - 1);
 
 	/*
@@ -155,6 +218,19 @@ struct io_rsrc_node *io_rsrc_node_alloc(struct io_ring_ctx *ctx, int type)
 	return node;
 }
 
+
+/*
+ * Function: bool io_rsrc_cache_init
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 bool io_rsrc_cache_init(struct io_ring_ctx *ctx)
 {
 	const int imu_cache_size = struct_size_t(struct io_mapped_ubuf, bvec,
@@ -168,6 +244,19 @@ bool io_rsrc_cache_init(struct io_ring_ctx *ctx)
 				   imu_cache_size, 0);
 	return ret;
 }
+
+
+/*
+ * Function: void io_rsrc_cache_free
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 void io_rsrc_cache_free(struct io_ring_ctx *ctx)
 {
@@ -217,8 +306,33 @@ static int __io_sqe_files_update(struct io_ring_ctx *ctx,
 	for (done = 0; done < nr_args; done++) {
 		u64 tag = 0;
 
-		if ((tags && copy_from_user(&tag, &tags[done], sizeof(tag))) ||
-		    copy_from_user(&fd, &fds[done], sizeof(fd))) {
+		if ((tags && 
+
+/*
+ * Function: copy_from_user
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+copy_from_user(&tag, &tags[done], sizeof(tag))) ||
+		    
+
+
+/*
+ * Function: copy_from_user
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+copy_from_user(&fd, &fds[done], sizeof(fd))) {
 			err = -EFAULT;
 			break;
 		}
@@ -292,7 +406,19 @@ static int __io_sqe_buffers_update(struct io_ring_ctx *ctx,
 			err = PTR_ERR(iov);
 			break;
 		}
-		if (tags && copy_from_user(&tag, &tags[done], sizeof(tag))) {
+		if (tags && 
+
+/*
+ * Function: copy_from_user
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+copy_from_user(&tag, &tags[done], sizeof(tag))) {
 			err = -EFAULT;
 			break;
 		}
@@ -350,7 +476,20 @@ int io_register_files_update(struct io_ring_ctx *ctx, void __user *arg,
 	if (!nr_args)
 		return -EINVAL;
 	memset(&up, 0, sizeof(up));
-	if (copy_from_user(&up, arg, sizeof(struct io_uring_rsrc_update)))
+	if (
+
+
+/*
+ * Function: copy_from_user
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+copy_from_user(&up, arg, sizeof(struct io_uring_rsrc_update)))
 		return -EFAULT;
 	if (up.resv || up.resv2)
 		return -EINVAL;
@@ -364,7 +503,19 @@ int io_register_rsrc_update(struct io_ring_ctx *ctx, void __user *arg,
 
 	if (size != sizeof(up))
 		return -EINVAL;
-	if (copy_from_user(&up, arg, sizeof(up)))
+	if (
+
+/*
+ * Function: copy_from_user
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+copy_from_user(&up, arg, sizeof(up)))
 		return -EFAULT;
 	if (!up.nr || up.resv || up.resv2)
 		return -EINVAL;
@@ -381,7 +532,19 @@ __cold int io_register_rsrc(struct io_ring_ctx *ctx, void __user *arg,
 		return -EINVAL;
 
 	memset(&rr, 0, sizeof(rr));
-	if (copy_from_user(&rr, arg, size))
+	if (
+
+/*
+ * Function: copy_from_user
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+copy_from_user(&rr, arg, size))
 		return -EFAULT;
 	if (!rr.nr || rr.resv2)
 		return -EINVAL;
@@ -403,6 +566,19 @@ __cold int io_register_rsrc(struct io_ring_ctx *ctx, void __user *arg,
 	return -EINVAL;
 }
 
+
+
+
+/*
+ * Function: int io_files_update_prep
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
 int io_files_update_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct io_rsrc_update *up = io_kiocb_to_cmd(req, struct io_rsrc_update);
@@ -433,7 +609,19 @@ static int io_files_update_with_index_alloc(struct io_kiocb *req,
 		return -ENXIO;
 
 	for (done = 0; done < up->nr_args; done++) {
-		if (copy_from_user(&fd, &fds[done], sizeof(fd))) {
+		if (
+
+/*
+ * Function: copy_from_user
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+copy_from_user(&fd, &fds[done], sizeof(fd))) {
 			ret = -EFAULT;
 			break;
 		}
@@ -459,6 +647,18 @@ static int io_files_update_with_index_alloc(struct io_kiocb *req,
 	return ret;
 }
 
+
+
+/*
+ * Function: int io_files_update
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
 int io_files_update(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_rsrc_update *up = io_kiocb_to_cmd(req, struct io_rsrc_update);
@@ -488,6 +688,18 @@ int io_files_update(struct io_kiocb *req, unsigned int issue_flags)
 	return IOU_OK;
 }
 
+
+
+/*
+ * Function: void io_free_rsrc_node
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
 void io_free_rsrc_node(struct io_ring_ctx *ctx, struct io_rsrc_node *node)
 {
 	if (node->tag)
@@ -508,6 +720,18 @@ void io_free_rsrc_node(struct io_ring_ctx *ctx, struct io_rsrc_node *node)
 	io_cache_free(&ctx->node_cache, node);
 }
 
+
+
+/*
+ * Function: int io_sqe_files_unregister
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
 int io_sqe_files_unregister(struct io_ring_ctx *ctx)
 {
 	if (!ctx->file_table.data.nr)
@@ -542,9 +766,33 @@ int io_sqe_files_register(struct io_ring_ctx *ctx, void __user *arg,
 		u64 tag = 0;
 
 		ret = -EFAULT;
-		if (tags && copy_from_user(&tag, &tags[i], sizeof(tag)))
+		if (tags && 
+
+/*
+ * Function: copy_from_user
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+copy_from_user(&tag, &tags[i], sizeof(tag)))
 			goto fail;
-		if (fds && copy_from_user(&fd, &fds[i], sizeof(fd)))
+		if (fds && 
+
+/*
+ * Function: copy_from_user
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+copy_from_user(&fd, &fds[i], sizeof(fd)))
 			goto fail;
 		/* allow sparse sets */
 		if (!fds || fd == -1) {
@@ -586,6 +834,19 @@ fail:
 	io_sqe_files_unregister(ctx);
 	return ret;
 }
+
+
+/*
+ * Function: int io_sqe_buffers_unregister
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 int io_sqe_buffers_unregister(struct io_ring_ctx *ctx)
 {
@@ -880,7 +1141,19 @@ int io_sqe_buffers_register(struct io_ring_ctx *ctx, void __user *arg,
 		}
 
 		if (tags) {
-			if (copy_from_user(&tag, &tags[i], sizeof(tag))) {
+			if (
+
+/*
+ * Function: copy_from_user
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+copy_from_user(&tag, &tags[i], sizeof(tag))) {
 				ret = -EFAULT;
 				break;
 			}
@@ -1239,6 +1512,19 @@ out_free:
  *
  * Since the memory is already accounted once, don't account it again.
  */
+
+/*
+ * Function: int io_register_clone_buffers
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_register_clone_buffers(struct io_ring_ctx *ctx, void __user *arg)
 {
 	struct io_uring_clone_buffers buf;
@@ -1247,7 +1533,20 @@ int io_register_clone_buffers(struct io_ring_ctx *ctx, void __user *arg)
 	struct file *file;
 	int ret;
 
-	if (copy_from_user(&buf, arg, sizeof(buf)))
+	if (
+/*
+ * Function: copy_from_user
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
+copy_from_user(&buf, arg, sizeof(buf)))
 		return -EFAULT;
 	if (buf.flags & ~(IORING_REGISTER_SRC_REGISTERED|IORING_REGISTER_DST_REPLACE))
 		return -EINVAL;
@@ -1276,6 +1575,19 @@ int io_register_clone_buffers(struct io_ring_ctx *ctx, void __user *arg)
 	return ret;
 }
 
+
+/*
+ * Function: void io_vec_free
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 void io_vec_free(struct iou_vec *iv)
 {
 	if (!iv->iovec)
@@ -1284,6 +1596,19 @@ void io_vec_free(struct iou_vec *iv)
 	iv->iovec = NULL;
 	iv->nr = 0;
 }
+
+
+/*
+ * Function: int io_vec_realloc
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 int io_vec_realloc(struct iou_vec *iv, unsigned nr_entries)
 {
@@ -1523,3 +1848,4 @@ int io_prep_reg_iovec(struct io_kiocb *req, struct iou_vec *iv,
 	req->flags |= REQ_F_IMPORT_BUFFER;
 	return 0;
 }
+
