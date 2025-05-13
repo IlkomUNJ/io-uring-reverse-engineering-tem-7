@@ -15,5 +15,5 @@ Score is mainly calculated from individual contributions made to the commit. The
 
 ## Team Members
 - Hylmi Akhdan (1313623036)
-- Farrell Shann Deandra (1313623067)
+- Farrell Shaan Deandra (1313623067)
 - Hezekhia Oshea Christian (13136230)
