@@ -242,7 +242,19 @@ __cold void io_uring_show_fdinfo(struct seq_file *m, struct file *file)
 		struct io_hash_bucket *hb = &ctx->cancel_table.hbs[i];
 		struct io_kiocb *req;
 
-		hlist_for_each_entry(req, &hb->list, hash_node)
+		/*
+		 * Function: list_for_each_entry
+		 * Description: Iterates over the list of entries safely, ensuring no entries are lost or accessed while being removed.
+		 * Parameters:
+		 *   - req: A pointer to the io_kiocb structure representing the IO request.
+		 *   - hb->list: The list of IO requests to iterate through.
+		 *   - hash_node: The node within the hash list.
+		 * Returns:
+		 *   - void: This function does not return any value.
+		 * Example usage:
+		 *   - This function is used to safely iterate over entries in the cancel list to check and handle each pending request.
+		 */
+list_for_each_entry(req, &hb->list, hash_node)
 			seq_printf(m, "  op=%d, task_works=%d\n", req->opcode,
 					task_work_pending(req->tctx->task));
 	}
@@ -252,7 +264,20 @@ __cold void io_uring_show_fdinfo(struct seq_file *m, struct file *file)
 
 	seq_puts(m, "CqOverflowList:\n");
 	spin_lock(&ctx->completion_lock);
-	list_for_each_entry(ocqe, &ctx->cq_overflow_list, list) {
+
+	/*
+	 * Function: list_for_each_entry
+	 * Description: Iterates safely through a list of overflow CQEs, printing information about each.
+	 * Parameters:
+	 *   - ocqe: A pointer to the io_overflow_cqe structure.
+	 *   - ctx->cq_overflow_list: The list of overflow CQEs.
+	 *   - list: The list in which CQEs are stored.
+	 * Returns:
+	 *   - void: This function does not return any value.
+	 * Example usage:
+	 *   - This function is used to safely iterate through a list of overflowed CQEs to print relevant details for debugging.
+	 */
+list_for_each_entry(ocqe, &ctx->cq_overflow_list, list) {
 		struct io_uring_cqe *cqe = &ocqe->cqe;
 
 		seq_printf(m, "  user_data=%llu, res=%d, flags=%x\n",
@@ -263,3 +288,5 @@ __cold void io_uring_show_fdinfo(struct seq_file *m, struct file *file)
 	napi_show_fdinfo(ctx, m);
 }
 #endif
+
+

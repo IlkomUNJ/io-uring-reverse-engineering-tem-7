@@ -104,30 +104,46 @@ static const struct ubuf_info_ops io_ubuf_ops = {
 	.link_skb = io_link_skb,
 };
 
-struct io_kiocb *io_alloc_notif(struct io_ring_ctx *ctx)
-	__must_hold(&ctx->uring_lock)
+/*
+ * Function: struct io_kiocb *io_alloc_not
+ * Description: This function allocates memory for a new I/O control block (`io_kiocb`) 
+ * to be used for notification operations in an io_uring context. It initializes 
+ * the fields of the `io_kiocb` structure and prepares it for use.
+ * Parameters:
+ *   - ctx: A pointer to the `io_ring_ctx` structure, representing the io_uring context.
+ * Returns:
+ *   - A pointer to the newly allocated `io_kiocb` structure if allocation is successful.
+ *   - NULL if the memory allocation for the request fails.
+ * Example usage:
+ *   - struct io_kiocb *notif = io_alloc_not(ctx);
+ */
+struct io_kiocb *io_alloc_not(struct io_ring_ctx *ctx)
 {
-	struct io_kiocb *notif;
-	struct io_notif_data *nd;
+	__must_hold(&ctx->uring_lock) {
+		struct io_kiocb *notif;
+		struct io_notif_data *nd;
 
-	if (unlikely(!io_alloc_req(ctx, &notif)))
-		return NULL;
-	notif->opcode = IORING_OP_NOP;
-	notif->flags = 0;
-	notif->file = NULL;
-	notif->tctx = current->io_uring;
-	io_get_task_refs(1);
-	notif->file_node = NULL;
-	notif->buf_node = NULL;
+		if (unlikely(!io_alloc_req(ctx, &notif)))
+			return NULL;
+		notif->opcode = IORING_OP_NOP;
+		notif->flags = 0;
+		notif->file = NULL;
+		notif->tctx = current->io_uring;
+		io_get_task_refs(1);
+		notif->file_node = NULL;
+		notif->buf_node = NULL;
 
-	nd = io_notif_to_data(notif);
-	nd->zc_report = false;
-	nd->account_pages = 0;
-	nd->next = NULL;
-	nd->head = nd;
+		nd = io_notif_to_data(notif);
+		nd->zc_report = false;
+		nd->account_pages = 0;
+		nd->next = NULL;
+		nd->head = nd;
 
-	nd->uarg.flags = IO_NOTIF_UBUF_FLAGS;
-	nd->uarg.ops = &io_ubuf_ops;
-	refcount_set(&nd->uarg.refcnt, 1);
-	return notif;
+		nd->uarg.flags = IO_NOTIF_UBUF_FLAGS;
+		nd->uarg.ops = &io_ubuf_ops;
+		refcount_set(&nd->uarg.refcnt, 1);
+		return notif;
+	}
 }
+
+

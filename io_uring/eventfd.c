@@ -55,63 +55,15 @@ static void io_eventfd_release(struct io_ev_fd *ev_fd, bool put_ref)
 }
 
 /*
- * Returns true if the caller should put the ev_fd reference, false if not.
+ * Function: io_eventfd_signal
+ * Description: Signals the eventfd associated with the IO ring context, triggering an event to notify waiting tasks.
+ * Parameters:
+ *   - ctx: Pointer to the io_ring_ctx structure representing the IO ring context.
+ * Returns:
+ *   - void: This function does not return any value.
+ * Example usage:
+ *   - This function is used to signal the eventfd in the IO ring context, notifying tasks waiting for the event.
  */
-static bool __io_eventfd_signal(struct io_ev_fd *ev_fd)
-{
-	if (eventfd_signal_allowed()) {
-		eventfd_signal_mask(ev_fd->cq_ev_fd, EPOLL_URING_WAKE);
-		return true;
-	}
-	if (!atomic_fetch_or(BIT(IO_EVENTFD_OP_SIGNAL_BIT), &ev_fd->ops)) {
-		call_rcu_hurry(&ev_fd->rcu, io_eventfd_do_signal);
-		return false;
-	}
-	return true;
-}
-
-/*
- * Trigger if eventfd_async isn't set, or if it's set and the caller is
- * an async worker. If ev_fd isn't valid, obviously return false.
- */
-static bool io_eventfd_trigger(struct io_ev_fd *ev_fd)
-{
-	if (ev_fd)
-		return !ev_fd->eventfd_async || io_wq_current_is_worker();
-	return false;
-}
-
-/*
- * On success, returns with an ev_fd reference grabbed and the RCU read
- * lock held.
- */
-static struct io_ev_fd *io_eventfd_grab(struct io_ring_ctx *ctx)
-{
-	struct io_ev_fd *ev_fd;
-
-	if (READ_ONCE(ctx->rings->cq_flags) & IORING_CQ_EVENTFD_DISABLED)
-		return NULL;
-
-	rcu_read_lock();
-
-	/*
-	 * rcu_dereference ctx->io_ev_fd once and use it for both for checking
-	 * and eventfd_signal
-	 */
-	ev_fd = rcu_dereference(ctx->io_ev_fd);
-
-	/*
-	 * Check again if ev_fd exists in case an io_eventfd_unregister call
-	 * completed between the NULL check of ctx->io_ev_fd at the start of
-	 * the function and rcu_read_lock.
-	 */
-	if (io_eventfd_trigger(ev_fd) && refcount_inc_not_zero(&ev_fd->refs))
-		return ev_fd;
-
-	rcu_read_unlock();
-	return NULL;
-}
-
 void io_eventfd_signal(struct io_ring_ctx *ctx)
 {
 	struct io_ev_fd *ev_fd;
@@ -121,6 +73,16 @@ void io_eventfd_signal(struct io_ring_ctx *ctx)
 		io_eventfd_release(ev_fd, __io_eventfd_signal(ev_fd));
 }
 
+/*
+ * Function: io_eventfd_flush_signal
+ * Description: Flushes the eventfd signal by checking if the event queue tail has advanced and triggering the eventfd signal if necessary.
+ * Parameters:
+ *   - ctx: Pointer to the io_ring_ctx structure representing the IO ring context.
+ * Returns:
+ *   - void: This function does not return any value.
+ * Example usage:
+ *   - This function is used to ensure that the eventfd signal is triggered when necessary, typically after a CQE is added to the completion queue.
+ */
 void io_eventfd_flush_signal(struct io_ring_ctx *ctx)
 {
 	struct io_ev_fd *ev_fd;
@@ -150,6 +112,18 @@ void io_eventfd_flush_signal(struct io_ring_ctx *ctx)
 	}
 }
 
+/*
+ * Function: io_eventfd_register
+ * Description: Registers an eventfd object to be used with the IO ring context for signaling.
+ * Parameters:
+ *   - ctx: Pointer to the io_ring_ctx structure representing the IO ring context.
+ *   - arg: Pointer to the user-space argument containing the eventfd file descriptor.
+ *   - eventfd_async: Boolean indicating whether the eventfd should be used asynchronously.
+ * Returns:
+ *   - 0 if successful, negative error code otherwise.
+ * Example usage:
+ *   - This function is used to register an eventfd for the IO ring context, enabling asynchronous signaling.
+ */
 int io_eventfd_register(struct io_ring_ctx *ctx, void __user *arg,
 			unsigned int eventfd_async)
 {
@@ -189,6 +163,16 @@ int io_eventfd_register(struct io_ring_ctx *ctx, void __user *arg,
 	return 0;
 }
 
+/*
+ * Function: io_eventfd_unregister
+ * Description: Unregisters the eventfd associated with the IO ring context.
+ * Parameters:
+ *   - ctx: Pointer to the io_ring_ctx structure representing the IO ring context.
+ * Returns:
+ *   - 0 if successful, -ENXIO if no eventfd was registered.
+ * Example usage:
+ *   - This function is used to unregister the eventfd object and release associated resources.
+ */
 int io_eventfd_unregister(struct io_ring_ctx *ctx)
 {
 	struct io_ev_fd *ev_fd;
@@ -204,3 +188,5 @@ int io_eventfd_unregister(struct io_ring_ctx *ctx)
 
 	return -ENXIO;
 }
+
+

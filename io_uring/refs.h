@@ -11,12 +11,18 @@
 #define req_ref_zero_or_close_to_overflow(req)	\
 	((unsigned int) atomic_read(&(req->refs)) + 127u <= 127u)
 
+/**
+ * increment request refcount if it is not zero
+ */
 static inline bool req_ref_inc_not_zero(struct io_kiocb *req)
 {
 	WARN_ON_ONCE(!(req->flags & REQ_F_REFCOUNT));
 	return atomic_inc_not_zero(&req->refs);
 }
 
+/**
+ * atomically decrement request refcount and test if it reached zero
+ */
 static inline bool req_ref_put_and_test_atomic(struct io_kiocb *req)
 {
 	WARN_ON_ONCE(!(data_race(req->flags) & REQ_F_REFCOUNT));
@@ -24,6 +30,9 @@ static inline bool req_ref_put_and_test_atomic(struct io_kiocb *req)
 	return atomic_dec_and_test(&req->refs);
 }
 
+/**
+ * decrement request refcount and test if it reached zero, with fast path for non-refcounted
+ */
 static inline bool req_ref_put_and_test(struct io_kiocb *req)
 {
 	if (likely(!(req->flags & REQ_F_REFCOUNT)))
@@ -33,6 +42,9 @@ static inline bool req_ref_put_and_test(struct io_kiocb *req)
 	return atomic_dec_and_test(&req->refs);
 }
 
+/**
+ * increment request refcount unconditionally
+ */
 static inline void req_ref_get(struct io_kiocb *req)
 {
 	WARN_ON_ONCE(!(req->flags & REQ_F_REFCOUNT));
@@ -40,6 +52,9 @@ static inline void req_ref_get(struct io_kiocb *req)
 	atomic_inc(&req->refs);
 }
 
+/**
+ * decrement request refcount unconditionally
+ */
 static inline void req_ref_put(struct io_kiocb *req)
 {
 	WARN_ON_ONCE(!(req->flags & REQ_F_REFCOUNT));
@@ -47,6 +62,9 @@ static inline void req_ref_put(struct io_kiocb *req)
 	atomic_dec(&req->refs);
 }
 
+/**
+ * set request refcount to given value and enable refcount tracking
+ */
 static inline void __io_req_set_refcount(struct io_kiocb *req, int nr)
 {
 	if (!(req->flags & REQ_F_REFCOUNT)) {
@@ -55,6 +73,9 @@ static inline void __io_req_set_refcount(struct io_kiocb *req, int nr)
 	}
 }
 
+/**
+ * initialize request refcount to 1 and enable refcount tracking
+ */
 static inline void io_req_set_refcount(struct io_kiocb *req)
 {
 	__io_req_set_refcount(req, 1);

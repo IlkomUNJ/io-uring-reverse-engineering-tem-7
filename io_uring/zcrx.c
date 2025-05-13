@@ -408,93 +408,125 @@ int io_register_zcrx_ifq(struct io_ring_ctx *ctx,
 	reg.offsets.head = offsetof(struct io_uring, head);
 	reg.offsets.tail = offsetof(struct io_uring, tail);
 
-	if (copy_to_user(arg, &reg, sizeof(reg)) ||
-	    copy_to_user(u64_to_user_ptr(reg.region_ptr), &rd, sizeof(rd)) ||
-	    copy_to_user(u64_to_user_ptr(reg.area_ptr), &area, sizeof(area))) {
-		ret = -EFAULT;
-		goto err;
-	}
-	ctx->ifq = ifq;
-	return 0;
-err:
-	io_zcrx_ifq_free(ifq);
-	return ret;
-}
-
-void io_unregister_zcrx_ifqs(struct io_ring_ctx *ctx)
-{
-	struct io_zcrx_ifq *ifq = ctx->ifq;
-
-	lockdep_assert_held(&ctx->uring_lock);
-
-	if (!ifq)
-		return;
-
-	ctx->ifq = NULL;
-	io_zcrx_ifq_free(ifq);
-}
-
-static struct net_iov *__io_zcrx_get_free_niov(struct io_zcrx_area *area)
-{
-	unsigned niov_idx;
-
-	lockdep_assert_held(&area->freelist_lock);
-
-	niov_idx = area->freelist[--area->free_count];
-	return &area->nia.niovs[niov_idx];
-}
-
-static void io_zcrx_return_niov_freelist(struct net_iov *niov)
-{
-	struct io_zcrx_area *area = io_zcrx_iov_to_area(niov);
-
-	spin_lock_bh(&area->freelist_lock);
-	area->freelist[area->free_count++] = net_iov_idx(niov);
-	spin_unlock_bh(&area->freelist_lock);
-}
-
-static void io_zcrx_return_niov(struct net_iov *niov)
-{
-	netmem_ref netmem = net_iov_to_netmem(niov);
-
-	if (!niov->pp) {
-		/* copy fallback allocated niovs */
-		io_zcrx_return_niov_freelist(niov);
-		return;
-	}
-	page_pool_put_unrefed_netmem(niov->pp, netmem, -1, false);
-}
-
-static void io_zcrx_scrub(struct io_zcrx_ifq *ifq)
-{
-	struct io_zcrx_area *area = ifq->area;
-	int i;
-
-	if (!area)
-		return;
-
-	/* Reclaim back all buffers given to the user space. */
-	for (i = 0; i < area->nia.num_niovs; i++) {
-		struct net_iov *niov = &area->nia.niovs[i];
-		int nr;
-
-		if (!atomic_read(io_get_user_counter(niov)))
-			continue;
-		nr = atomic_xchg(io_get_user_counter(niov), 0);
-		if (nr && !page_pool_unref_netmem(net_iov_to_netmem(niov), nr))
-			io_zcrx_return_niov(niov);
-	}
-}
-
-void io_shutdown_zcrx_ifqs(struct io_ring_ctx *ctx)
-{
-	lockdep_assert_held(&ctx->uring_lock);
-
-	if (!ctx->ifq)
-		return;
-	io_zcrx_scrub(ctx->ifq);
-	io_close_queue(ctx->ifq);
-}
+	if (
+/*
+ * Function: int copy_to_user
+ * Description: Fungsi ini digunakan untuk menyalin data dari kernel ke ruang pengguna. Ini memastikan bahwa data yang dipindahkan sesuai dengan batasan memori pengguna dan dapat digunakan oleh aplikasi pengguna.
+ * Parameters:
+ *   - arg (void *): Pointer ke alamat di ruang pengguna tempat data akan disalin.
+ *   - reg (void *): Pointer ke data yang akan disalin ke ruang pengguna.
+ *   - size (size_t): Ukuran data yang akan disalin.
+ * Returns:
+ *   - int: Mengembalikan 0 jika operasi berhasil, atau -EFAULT jika terjadi kesalahan dalam menyalin data.
+ * Example usage:
+ *   - copy_to_user(arg, &reg, sizeof(reg));
+ */
+ copy_to_user(arg, &reg, sizeof(reg)) ||
+ copy_to_user(u64_to_user_ptr(reg.region_ptr), &rd, sizeof(rd)) ||
+ copy_to_user(u64_to_user_ptr(reg.area_ptr), &area, sizeof(area))) {
+		 ret = -EFAULT;
+		 goto err;
+	 }
+	 ctx->ifq = ifq;
+	 return 0;
+ err:
+	 io_zcrx_ifq_free(ifq);
+	 return ret;
+ }
+ 
+ /*
+  * Function: void io_unregister_zcrx_ifqs
+  * Description: Fungsi ini digunakan untuk membebaskan dan menonaktifkan antrian yang digunakan oleh ZCRX (Zero-Copy Receive). Ini menghapus antrian dan sumber daya yang terkait dari konteks io_ring.
+  * Parameters:
+  *   - ctx (struct io_ring_ctx*): Pointer ke konteks IO ring yang berisi antrian yang akan dibersihkan.
+  * Returns:
+  *   - void: Fungsi ini tidak mengembalikan nilai.
+  * Example usage:
+  *   - io_unregister_zcrx_ifqs(ctx);
+  */
+ void io_unregister_zcrx_ifqs(struct io_ring_ctx *ctx)
+ {
+	 struct io_zcrx_ifq *ifq = ctx->ifq;
+ 
+	 lockdep_assert_held(&ctx->uring_lock);
+ 
+	 if (!ifq)
+		 return;
+ 
+	 ctx->ifq = NULL;
+	 io_zcrx_ifq_free(ifq);
+ }
+ 
+ /*
+  * Function: void io_shutdown_zcrx_ifqs
+  * Description: Fungsi ini digunakan untuk menghentikan dan membersihkan antrian ZCRX (Zero-Copy Receive) yang terkait dengan konteks IO ring. Ini memanggil fungsi scrub untuk menghapus buffer yang digunakan dan menutup antrian.
+  * Parameters:
+  *   - ctx (struct io_ring_ctx*): Pointer ke konteks IO ring yang berisi antrian yang akan dihentikan.
+  * Returns:
+  *   - void: Fungsi ini tidak mengembalikan nilai.
+  * Example usage:
+  *   - io_shutdown_zcrx_ifqs(ctx);
+  */
+ void io_shutdown_zcrx_ifqs(struct io_ring_ctx *ctx)
+ {
+	 lockdep_assert_held(&ctx->uring_lock);
+ 
+	 if (!ctx->ifq)
+		 return;
+	 io_zcrx_scrub(ctx->ifq);
+	 io_close_queue(ctx->ifq);
+ }
+ 
+ /*
+  * Function: static void io_zcrx_return_niov_freelist
+  * Description: Fungsi ini digunakan untuk mengembalikan elemen yang dipakai dari daftar yang tersedia untuk digunakan kembali, dengan mengunci akses ke struktur yang terkait untuk menjaga konsistensi.
+  * Parameters:
+  *   - niov (struct net_iov*): Pointer ke elemen yang akan dikembalikan ke daftar.
+  * Returns:
+  *   - void: Fungsi ini tidak mengembalikan nilai.
+  * Example usage:
+  *   - io_zcrx_return_niov_freelist(niov);
+  */
+ static void io_zcrx_return_niov_freelist(struct net_iov *niov)
+ {
+	 struct io_zcrx_area *area = io_zcrx_iov_to_area(niov);
+ 
+	 spin_lock_bh(&area->freelist_lock);
+	 area->freelist[area->free_count++] = net_iov_idx(niov);
+	 spin_unlock_bh(&area->freelist_lock);
+ }
+ 
+ /*
+  * Function: static void io_zcrx_scrub
+  * Description: Fungsi ini digunakan untuk membersihkan buffer yang digunakan oleh pengguna dengan mengembalikan buffer yang terpakai dan menghapus referensi yang tidak diperlukan lagi.
+  * Parameters:
+  *   - ifq (struct io_zcrx_ifq*): Pointer ke antrian yang akan dibersihkan.
+  * Returns:
+  *   - void: Fungsi ini tidak mengembalikan nilai.
+  * Example usage:
+  *   - io_zcrx_scrub(ifq);
+  */
+ static void io_zcrx_scrub(struct io_zcrx_ifq *ifq)
+ {
+	 struct io_zcrx_area *area = ifq->area;
+	 int i;
+ 
+	 if (!area)
+		 return;
+ 
+	 /* Reclaim back all buffers given to the user space. */
+	 for (i = 0; i < area->nia.num_niovs; i++) {
+		 struct net_iov *niov = &area->nia.niovs[i];
+		 int nr;
+ 
+		 if (!atomic_read(io_get_user_counter(niov)))
+			 continue;
+		 nr = atomic_xchg(io_get_user_counter(niov), 0);
+		 if (nr && !page_pool_unref_netmem(net_iov_to_netmem(niov), nr))
+			 io_zcrx_return_niov(niov);
+	 }
+ }
+ 
 
 static inline u32 io_zcrx_rqring_entries(struct io_zcrx_ifq *ifq)
 {
@@ -877,7 +909,20 @@ io_zcrx_recv_skb(read_descriptor_t *desc, struct sk_buff *skb,
 		start = end;
 	}
 
-	skb_walk_frags(skb, frag_iter) {
+	
+/*
+ * Function: skb_walk_frags
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
+skb_walk_frags(skb, frag_iter) {
 		if (WARN_ON(start > offset + len))
 			return -EFAULT;
 
@@ -966,3 +1011,4 @@ int io_zcrx_recv(struct io_kiocb *req, struct io_zcrx_ifq *ifq,
 	sock_rps_record_flow(sk);
 	return io_zcrx_tcp_recvmsg(req, ifq, sk, flags, issue_flags, len);
 }
+

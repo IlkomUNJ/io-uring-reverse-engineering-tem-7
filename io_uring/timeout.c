@@ -106,7 +106,20 @@ static __cold bool io_flush_killed_timeouts(struct list_head *list, int err)
 }
 
 static void io_kill_timeout(struct io_kiocb *req, struct list_head *list)
-	__must_hold(&req->ctx->timeout_lock)
+	
+/*
+ * Function: __must_hold
+ * Description: This function ensures that a specific lock (timeout_lock or completion_lock) is held before performing certain operations on `io_uring` resources. The function performs operations like canceling timeouts, moving timeouts to a different list, or handling failure links in the task queue while maintaining synchronization.
+ * Parameters:
+ *   - &req->ctx->timeout_lock: A pointer to the timeout lock used for synchronizing access to timeout-related resources.
+ *   - &req->ctx->completion_lock: A pointer to the completion lock used for synchronizing access to completion queue entries (CQEs) and task work.
+ * Returns:
+ *   - This function does not return a value. It ensures that the required lock is held before performing operations.
+ * Example usage:
+ *   - __must_hold(&req->ctx->timeout_lock);
+ *   - __must_hold(&req->ctx->completion_lock);
+ */
+__must_hold(&req->ctx->timeout_lock)
 {
 	struct io_timeout_data *io = req->async_data;
 
@@ -128,6 +141,19 @@ __cold void io_flush_timeouts(struct io_ring_ctx *ctx)
 	raw_spin_lock_irq(&ctx->timeout_lock);
 	seq = ctx->cached_cq_tail - atomic_read(&ctx->cq_timeouts);
 
+	/*
+	 * Function: list_for_each_entry_safe
+	 * Description: Iterates over the list of timeouts safely, allowing for the removal of entries during the iteration.
+	 * Parameters:
+	 *   - timeout: A pointer to each timeout entry.
+	 *   - tmp: A temporary pointer used to store the next timeout entry in the list.
+	 *   - &ctx->timeout_list: The list of timeouts to iterate over.
+	 *   - list: The field within the timeout entry used for list traversal.
+	 * Returns:
+	 *   - This function does not return a value.
+	 * Example usage:
+	 *   - list_for_each_entry_safe(timeout, tmp, &ctx->timeout_list, list) { ... }
+	 */
 	list_for_each_entry_safe(timeout, tmp, &ctx->timeout_list, list) {
 		struct io_kiocb *req = cmd_to_io_kiocb(timeout);
 		u32 events_needed, events_got;
@@ -135,13 +161,6 @@ __cold void io_flush_timeouts(struct io_ring_ctx *ctx)
 		if (io_is_timeout_noseq(req))
 			break;
 
-		/*
-		 * Since seq can easily wrap around over time, subtract
-		 * the last seq at which timeouts were flushed before comparing.
-		 * Assuming not more than 2^31-1 events have happened since,
-		 * these subtractions won't have wrapped, so we can check if
-		 * target is in [last_seq, current_seq] by comparing the two.
-		 */
 		events_needed = timeout->target_seq - ctx->cq_last_tm_flush;
 		events_got = seq - ctx->cq_last_tm_flush;
 		if (events_got < events_needed)
@@ -171,28 +190,31 @@ static void io_req_tw_fail_links(struct io_kiocb *link, io_tw_token_t tw)
 }
 
 static void io_fail_links(struct io_kiocb *req)
-	__must_hold(&req->ctx->completion_lock)
 {
-	struct io_kiocb *link = req->link;
-	bool ignore_cqes = req->flags & REQ_F_SKIP_LINK_CQES;
+	__must_hold(&req->ctx->completion_lock)
+	{
+		struct io_kiocb *link = req->link;
+		bool ignore_cqes = req->flags & REQ_F_SKIP_LINK_CQES;
 
-	if (!link)
-		return;
+		if (!link)
+			return;
 
-	while (link) {
-		if (ignore_cqes)
-			link->flags |= REQ_F_CQE_SKIP;
-		else
-			link->flags &= ~REQ_F_CQE_SKIP;
-		trace_io_uring_fail_link(req, link);
-		link = link->link;
+		while (link) {
+			if (ignore_cqes)
+				link->flags |= REQ_F_CQE_SKIP;
+			else
+				link->flags &= ~REQ_F_CQE_SKIP;
+			trace_io_uring_fail_link(req, link);
+			link = link->link;
+		}
+
+		link = req->link;
+		link->io_task_work.func = io_req_tw_fail_links;
+		io_req_task_work_add(link);
+		req->link = NULL;
 	}
-
-	link = req->link;
-	link->io_task_work.func = io_req_tw_fail_links;
-	io_req_task_work_add(link);
-	req->link = NULL;
 }
+
 
 static inline void io_remove_next_linked(struct io_kiocb *req)
 {
@@ -203,7 +225,19 @@ static inline void io_remove_next_linked(struct io_kiocb *req)
 }
 
 void io_disarm_next(struct io_kiocb *req)
-	__must_hold(&req->ctx->completion_lock)
+	
+
+/*
+ * Function: __must_hold
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+__must_hold(&req->ctx->completion_lock)
 {
 	struct io_kiocb *link = NULL;
 
@@ -230,8 +264,31 @@ void io_disarm_next(struct io_kiocb *req)
 
 struct io_kiocb *__io_disarm_linked_timeout(struct io_kiocb *req,
 					    struct io_kiocb *link)
-	__must_hold(&req->ctx->completion_lock)
-	__must_hold(&req->ctx->timeout_lock)
+	
+
+/*
+ * Function: __must_hold
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+__must_hold(&req->ctx->completion_lock)
+
+/*
+ * Function: __must_hold
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+__must_hold(&req->ctx->timeout_lock)
 {
 	struct io_timeout_data *io = link->async_data;
 	struct io_timeout *timeout = io_kiocb_to_cmd(link, struct io_timeout);
@@ -272,13 +329,35 @@ static enum hrtimer_restart io_timeout_fn(struct hrtimer *timer)
 
 static struct io_kiocb *io_timeout_extract(struct io_ring_ctx *ctx,
 					   struct io_cancel_data *cd)
-	__must_hold(&ctx->timeout_lock)
+	
+
+/*
+ * Function: __must_hold
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+__must_hold(&ctx->timeout_lock)
 {
 	struct io_timeout *timeout;
 	struct io_timeout_data *io;
 	struct io_kiocb *req = NULL;
 
-	list_for_each_entry(timeout, &ctx->timeout_list, list) {
+/*
+ * Function: list_for_each_entry
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+list_for_each_entry(timeout, &ctx->timeout_list, list) {
 		struct io_kiocb *tmp = cmd_to_io_kiocb(timeout);
 
 		if (io_cancel_req_match(tmp, cd)) {
@@ -298,7 +377,19 @@ static struct io_kiocb *io_timeout_extract(struct io_ring_ctx *ctx,
 }
 
 int io_timeout_cancel(struct io_ring_ctx *ctx, struct io_cancel_data *cd)
-	__must_hold(&ctx->completion_lock)
+	
+
+/*
+ * Function: __must_hold
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+__must_hold(&ctx->completion_lock)
 {
 	struct io_kiocb *req;
 
@@ -387,13 +478,36 @@ static clockid_t io_timeout_get_clock(struct io_timeout_data *data)
 
 static int io_linked_timeout_update(struct io_ring_ctx *ctx, __u64 user_data,
 				    struct timespec64 *ts, enum hrtimer_mode mode)
-	__must_hold(&ctx->timeout_lock)
+	
+
+/*
+ * Function: __must_hold
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+__must_hold(&ctx->timeout_lock)
 {
 	struct io_timeout_data *io;
 	struct io_timeout *timeout;
 	struct io_kiocb *req = NULL;
 
-	list_for_each_entry(timeout, &ctx->ltimeout_list, list) {
+
+/*
+ * Function: list_for_each_entry
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+list_for_each_entry(timeout, &ctx->ltimeout_list, list) {
 		struct io_kiocb *tmp = cmd_to_io_kiocb(timeout);
 
 		if (user_data == tmp->cqe.user_data) {
@@ -414,7 +528,18 @@ static int io_linked_timeout_update(struct io_ring_ctx *ctx, __u64 user_data,
 
 static int io_timeout_update(struct io_ring_ctx *ctx, __u64 user_data,
 			     struct timespec64 *ts, enum hrtimer_mode mode)
-	__must_hold(&ctx->timeout_lock)
+	
+/*
+ * Function: __must_hold
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+__must_hold(&ctx->timeout_lock)
 {
 	struct io_cancel_data cd = { .ctx = ctx, .data = user_data, };
 	struct io_kiocb *req = io_timeout_extract(ctx, &cd);
@@ -434,6 +559,16 @@ static int io_timeout_update(struct io_ring_ctx *ctx, __u64 user_data,
 	return 0;
 }
 
+/*
+ * Function: int io_timeout_remove_prep
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
 int io_timeout_remove_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct io_timeout_rem *tr = io_kiocb_to_cmd(req, struct io_timeout_rem);
@@ -474,6 +609,19 @@ static inline enum hrtimer_mode io_translate_timeout_mode(unsigned int flags)
 /*
  * Remove or update an existing timeout command
  */
+
+/*
+ * Function: int io_timeout_remove
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_timeout_remove(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_timeout_rem *tr = io_kiocb_to_cmd(req, struct io_timeout_rem);
@@ -573,15 +721,53 @@ static int __io_timeout_prep(struct io_kiocb *req,
 	return 0;
 }
 
+
+/*
+ * Function: int io_timeout_prep
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 int io_timeout_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	return __io_timeout_prep(req, sqe, false);
 }
 
+
+/*
+ * Function: int io_link_timeout_prep
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_link_timeout_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	return __io_timeout_prep(req, sqe, true);
 }
+
+
+/*
+ * Function: int io_timeout
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 int io_timeout(struct io_kiocb *req, unsigned int issue_flags)
 {
@@ -616,7 +802,20 @@ int io_timeout(struct io_kiocb *req, unsigned int issue_flags)
 	 * Insertion sort, ensuring the first entry in the list is always
 	 * the one we need first.
 	 */
-	list_for_each_prev(entry, &ctx->timeout_list) {
+	
+/*
+ * Function: list_for_each_prev
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
+list_for_each_prev(entry, &ctx->timeout_list) {
 		struct io_timeout *nextt = list_entry(entry, struct io_timeout, list);
 		struct io_kiocb *nxt = cmd_to_io_kiocb(nextt);
 
@@ -632,6 +831,19 @@ add:
 	raw_spin_unlock_irq(&ctx->timeout_lock);
 	return IOU_ISSUE_SKIP_COMPLETE;
 }
+
+
+/*
+ * Function: void io_queue_linked_timeout
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 void io_queue_linked_timeout(struct io_kiocb *req)
 {
@@ -657,7 +869,9 @@ void io_queue_linked_timeout(struct io_kiocb *req)
 
 static bool io_match_task(struct io_kiocb *head, struct io_uring_task *tctx,
 			  bool cancel_all)
-	__must_hold(&head->ctx->timeout_lock)
+	
+
+__must_hold(&head->ctx->timeout_lock)
 {
 	struct io_kiocb *req;
 
@@ -666,7 +880,20 @@ static bool io_match_task(struct io_kiocb *head, struct io_uring_task *tctx,
 	if (cancel_all)
 		return true;
 
-	io_for_each_link(req, head) {
+	
+/*
+ * Function: io_for_each_link
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
+io_for_each_link(req, head) {
 		if (req->flags & REQ_F_INFLIGHT)
 			return true;
 	}
@@ -686,7 +913,19 @@ __cold bool io_kill_timeouts(struct io_ring_ctx *ctx, struct io_uring_task *tctx
 	 */
 	spin_lock(&ctx->completion_lock);
 	raw_spin_lock_irq(&ctx->timeout_lock);
-	list_for_each_entry_safe(timeout, tmp, &ctx->timeout_list, list) {
+	
+
+/*
+ * Function: list_for_each_entry_safe
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+list_for_each_entry_safe(timeout, tmp, &ctx->timeout_list, list) {
 		struct io_kiocb *req = cmd_to_io_kiocb(timeout);
 
 		if (io_match_task(req, tctx, cancel_all))
@@ -697,3 +936,4 @@ __cold bool io_kill_timeouts(struct io_ring_ctx *ctx, struct io_uring_task *tctx
 
 	return io_flush_killed_timeouts(&list, -ECANCELED);
 }
+

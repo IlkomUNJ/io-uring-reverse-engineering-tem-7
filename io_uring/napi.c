@@ -23,7 +23,19 @@ static struct io_napi_entry *io_napi_hash_find(struct hlist_head *hash_list,
 {
 	struct io_napi_entry *e;
 
-	hlist_for_each_entry_rcu(e, hash_list, node) {
+	/*
+	 * Function: hlist_for_each_entry_rcu
+	 * Description: This function iterates over all entries in the hash list 
+	 * and returns the entry that matches the given napi_id.
+	 * Parameters:
+	 *   - hash_list: A pointer to the hash list where the entries are stored.
+	 *   - napi_id: The ID of the NAPI entry to search for.
+	 * Returns:
+	 *   - A pointer to the matching `io_napi_entry` if found, or NULL if not.
+	 * Example usage:
+	 *   - struct io_napi_entry *entry = io_napi_hash_find(hash_list, napi_id);
+	 */
+	list_for_each_entry_rcu(e, hash_list, node) {
 		if (e->napi_id != napi_id)
 			continue;
 		return e;
@@ -38,6 +50,24 @@ static inline ktime_t net_to_ktime(unsigned long t)
 	return ns_to_ktime(t << 10);
 }
 
+
+/*
+ * Function: int __io_napi_add_id
+ * Description: This function adds a new NAPI entry with a given napi_id to the 
+ * hash table and the napi list. If the napi_id already exists, it updates 
+ * the timeout.
+ * Parameters:
+ *   - ctx: A pointer to the `io_ring_ctx` structure, which represents the 
+ *     I/O ring context.
+ *   - napi_id: The ID of the NAPI entry to add.
+ * Returns:
+ *   - 0 if the entry was successfully added.
+ *   - -EINVAL if the napi_id is invalid.
+ *   - -EEXIST if the napi_id already exists in the hash table.
+ *   - -ENOMEM if memory allocation failed.
+ * Example usage:
+ *   - ret = __io_napi_add_id(ctx, napi_id);
+ */
 int __io_napi_add_id(struct io_ring_ctx *ctx, unsigned int napi_id)
 {
 	struct hlist_head *hash_list;
@@ -49,6 +79,18 @@ int __io_napi_add_id(struct io_ring_ctx *ctx, unsigned int napi_id)
 
 	hash_list = &ctx->napi_ht[hash_min(napi_id, HASH_BITS(ctx->napi_ht))];
 
+	/*
+	 * Function: scoped_guard
+	 * Description: This macro is used to ensure proper locking for read-modify-write 
+	 * operations. It ensures that the critical section is protected against 
+	 * concurrent access.
+	 * Parameters:
+	 *   - rcu: Reference to the Read-Write lock that manages access to RCU structures.
+	 * Returns:
+	 *   - None
+	 * Example usage:
+	 *   - scoped_guard(rcu) { ... }
+	 */
 	scoped_guard(rcu) {
 		e = io_napi_hash_find(hash_list, napi_id);
 		if (e) {
@@ -113,6 +155,19 @@ static void __io_napi_remove_stale(struct io_ring_ctx *ctx)
 	 * 2. kfree_rcu() delays the memory freeing until the next quiescent
 	 *    state
 	 */
+	
+	/*
+	 * Function: list_for_each_entry
+	 * Description: This function iterates through each entry in the list, 
+	 * checking for expired entries to be removed.
+	 * Parameters:
+	 *   - e: A pointer to the current entry.
+	 *   - ctx->napi_list: The list of NAPI entries in the I/O ring context.
+	 * Returns:
+	 *   - None
+	 * Example usage:
+	 *   - list_for_each_entry(e, &ctx->napi_list, list) { ... }
+	 */
 	list_for_each_entry(e, &ctx->napi_list, list) {
 		if (time_after(jiffies, READ_ONCE(e->timeout))) {
 			list_del_rcu(&e->list);
@@ -166,6 +221,18 @@ static bool static_tracking_do_busy_loop(struct io_ring_ctx *ctx,
 {
 	struct io_napi_entry *e;
 
+	/*
+	 * Function: list_for_each_entry_rcu
+	 * Description: This function iterates through each entry in the list, checking 
+	 * for NAPI entries and executing the busy poll loop accordingly.
+	 * Parameters:
+	 *   - e: A pointer to the current entry.
+	 *   - ctx->napi_list: The list of NAPI entries in the I/O ring context.
+	 * Returns:
+	 *   - None
+	 * Example usage:
+	 *   - list_for_each_entry_rcu(e, &ctx->napi_list, list) { ... }
+	 */
 	list_for_each_entry_rcu(e, &ctx->napi_list, list)
 		napi_busy_loop_rcu(e->napi_id, loop_end, loop_end_arg,
 				   ctx->napi_prefer_busy_poll, BUSY_POLL_BUDGET);
@@ -180,6 +247,19 @@ dynamic_tracking_do_busy_loop(struct io_ring_ctx *ctx,
 	struct io_napi_entry *e;
 	bool is_stale = false;
 
+	/*
+	 * Function: list_for_each_entry_rcu
+	 * Description: This function iterates through each entry in the list, checking 
+	 * for NAPI entries and executing the busy poll loop accordingly, while also 
+	 * checking if entries are stale.
+	 * Parameters:
+	 *   - e: A pointer to the current entry.
+	 *   - ctx->napi_list: The list of NAPI entries in the I/O ring context.
+	 * Returns:
+	 *   - None
+	 * Example usage:
+	 *   - list_for_each_entry_rcu(e, &ctx->napi_list, list) { ... }
+	 */
 	list_for_each_entry_rcu(e, &ctx->napi_list, list) {
 		napi_busy_loop_rcu(e->napi_id, loop_end, loop_end_arg,
 				   ctx->napi_prefer_busy_poll, BUSY_POLL_BUDGET);
@@ -217,6 +297,16 @@ static void io_napi_blocking_busy_loop(struct io_ring_ctx *ctx,
 		loop_end_arg = iowq;
 	}
 
+	/*
+	 * Function: scoped_guard
+	 * Description: This macro is used to ensure proper locking for the critical section.
+	 * Parameters:
+	 *   - rcu: Reference to the Read-Write lock that manages access to RCU structures.
+	 * Returns:
+	 *   - None
+	 * Example usage:
+	 *   - scoped_guard(rcu) { ... }
+	 */
 	scoped_guard(rcu) {
 		do {
 			is_stale = __io_napi_do_busy_loop(ctx, loop_end,
@@ -233,6 +323,17 @@ static void io_napi_blocking_busy_loop(struct io_ring_ctx *ctx,
  * @ctx: pointer to io-uring context structure
  *
  * Init napi settings in the io-uring context.
+ */
+
+/*
+ * Function: void io_napi_init
+ * Description: This function initializes the NAPI settings in the I/O ring context.
+ * Parameters:
+ *   - ctx: A pointer to the `io_ring_ctx` structure, which represents the I/O ring context.
+ * Returns:
+ *   - None
+ * Example usage:
+ *   - io_napi_init(ctx);
  */
 void io_napi_init(struct io_ring_ctx *ctx)
 {
@@ -251,16 +352,40 @@ void io_napi_init(struct io_ring_ctx *ctx)
  *
  * Free the napi list and the hash table in the io-uring context.
  */
+
+/*
+ * Function: void io_napi_free
+ * Description: This function frees the NAPI list and the hash table in the I/O ring context.
+ * Parameters:
+ *   - ctx: A pointer to the `io_ring_ctx` structure, which represents the I/O ring context.
+ * Returns:
+ *   - None
+ * Example usage:
+ *   - io_napi_free(ctx);
+ */
 void io_napi_free(struct io_ring_ctx *ctx)
 {
 	struct io_napi_entry *e;
 
 	guard(spinlock)(&ctx->napi_lock);
+
+	/*
+	 * Function: list_for_each_entry
+	 * Description: This function iterates through each entry in the list and 
+	 * frees the associated resources.
+	 * Parameters:
+	 *   - e: A pointer to the current entry.
+	 *   - ctx->napi_list: The list of NAPI entries in the I/O ring context.
+	 * Returns:
+	 *   - None
+	 * Example usage:
+	 *   - list_for_each_entry(e, &ctx->napi_list, list) { ... }
+	 */
 	list_for_each_entry(e, &ctx->napi_list, list) {
 		hash_del_rcu(&e->node);
 		kfree_rcu(e, rcu);
 	}
-	INIT_LIST_HEAD_RCU(&ctx->napi_list);
+	INIT_LIST_HEAD_RCPU(&ctx->napi_list);
 }
 
 static int io_napi_register_napi(struct io_ring_ctx *ctx,
@@ -288,6 +413,19 @@ static int io_napi_register_napi(struct io_ring_ctx *ctx,
  *
  * Register napi in the io-uring context.
  */
+
+/*
+ * Function: int io_register_napi
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_register_napi(struct io_ring_ctx *ctx, void __user *arg)
 {
 	const struct io_uring_napi curr = {
@@ -331,6 +469,19 @@ int io_register_napi(struct io_ring_ctx *ctx, void __user *arg)
  * Unregister napi. If arg has been specified copy the busy poll timeout and
  * prefer busy poll setting to the passed in structure.
  */
+
+/*
+ * Function: int io_unregister_napi
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_unregister_napi(struct io_ring_ctx *ctx, void __user *arg)
 {
 	const struct io_uring_napi curr = {
@@ -354,6 +505,19 @@ int io_unregister_napi(struct io_ring_ctx *ctx, void __user *arg)
  *
  * Execute the busy poll loop and merge the spliced off list.
  */
+
+
+/*
+ * Function: void __io_napi_busy_loop
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 void __io_napi_busy_loop(struct io_ring_ctx *ctx, struct io_wait_queue *iowq)
 {
 	if (ctx->flags & IORING_SETUP_SQPOLL)
@@ -376,6 +540,18 @@ void __io_napi_busy_loop(struct io_ring_ctx *ctx, struct io_wait_queue *iowq)
  *
  * Splice of the napi list and execute the napi busy poll loop.
  */
+
+/*
+ * Function: int io_napi_sqpoll_busy_poll
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 int io_napi_sqpoll_busy_poll(struct io_ring_ctx *ctx)
 {
 	bool is_stale = false;
@@ -384,8 +560,19 @@ int io_napi_sqpoll_busy_poll(struct io_ring_ctx *ctx)
 		return 0;
 	if (list_empty_careful(&ctx->napi_list))
 		return 0;
+	
+/*
+ * Function: scoped_guard
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
 
-	scoped_guard(rcu) {
+scoped_guard(rcu) {
 		is_stale = __io_napi_do_busy_loop(ctx, NULL, NULL);
 	}
 
@@ -394,3 +581,4 @@ int io_napi_sqpoll_busy_poll(struct io_ring_ctx *ctx)
 }
 
 #endif
+

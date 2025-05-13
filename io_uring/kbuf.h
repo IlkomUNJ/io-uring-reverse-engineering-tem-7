@@ -61,29 +61,75 @@ void __user *io_buffer_select(struct io_kiocb *req, size_t *len,
 			      unsigned int issue_flags);
 int io_buffers_select(struct io_kiocb *req, struct buf_sel_arg *arg,
 		      unsigned int issue_flags);
+/**
+ * non-destructively check availability of buffers for a request
+ */
 int io_buffers_peek(struct io_kiocb *req, struct buf_sel_arg *arg);
+/**
+ * free all provided buffers and associated memory in this context
+ */
 void io_destroy_buffers(struct io_ring_ctx *ctx);
 
+/**
+ * prepare to remove previously provided buffers from the ring
+ */
 int io_remove_buffers_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe);
+/**
+ * remove provided buffers associated with a request
+ */
 int io_remove_buffers(struct io_kiocb *req, unsigned int issue_flags);
 
+/**
+ * prepare to register new provided buffers with the ring
+ */
 int io_provide_buffers_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe);
+/**
+ * register user-provided buffers for future use in I/O
+ */
 int io_provide_buffers(struct io_kiocb *req, unsigned int issue_flags);
 
+/**
+ * register a mapped buffer ring with the given context
+ */
 int io_register_pbuf_ring(struct io_ring_ctx *ctx, void __user *arg);
+/**
+ * unregister a previously registered provided buffer ring
+ */
 int io_unregister_pbuf_ring(struct io_ring_ctx *ctx, void __user *arg);
+/**
+ * return status information about provided buffer registration
+ */
 int io_register_pbuf_status(struct io_ring_ctx *ctx, void __user *arg);
 
+/**
+ * attempt to recycle a selected buffer from legacy buffer list
+ */
 bool io_kbuf_recycle_legacy(struct io_kiocb *req, unsigned issue_flags);
+/**
+ * drop any selected legacy buffer reference for this request
+ */
 void io_kbuf_drop_legacy(struct io_kiocb *req);
 
+/**
+ * release one or more selected buffers and return buffer count
+ */
 unsigned int __io_put_kbufs(struct io_kiocb *req, int len, int nbufs);
+
+/**
+ * commit buffer usage to the buffer list after successful I/O
+ */
 bool io_kbuf_commit(struct io_kiocb *req,
 		    struct io_buffer_list *bl, int len, int nr);
 
+/**
+ * retrieve memory region associated with a given buffer group ID
+ */
 struct io_mapped_region *io_pbuf_get_region(struct io_ring_ctx *ctx,
 					    unsigned int bgid);
 
+/**
+ * try to recycle a ring-mapped buffer and reset relevant flags
+ */
 static inline bool io_kbuf_recycle_ring(struct io_kiocb *req)
 {
 	/*

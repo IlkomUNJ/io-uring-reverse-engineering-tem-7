@@ -44,29 +44,40 @@ static struct io_wq *io_init_wq_offload(struct io_ring_ctx *ctx,
 	return io_wq_create(concurrency, &data);
 }
 
-void __io_uring_free(struct task_struct *tsk)
-{
-	struct io_uring_task *tctx = tsk->io_uring;
-	struct io_tctx_node *node;
-	unsigned long index;
-
-	/*
-	 * Fault injection forcing allocation errors in the xa_store() path
-	 * can lead to xa_empty() returning false, even though no actual
-	 * node is stored in the xarray. Until that gets sorted out, attempt
-	 * an iteration here and warn if any entries are found.
-	 */
-	xa_for_each(&tctx->xa, index, node) {
-		WARN_ON_ONCE(1);
-		break;
-	}
-	WARN_ON_ONCE(tctx->io_wq);
-	WARN_ON_ONCE(tctx->cached_refs);
-
-	percpu_counter_destroy(&tctx->inflight);
-	kfree(tctx);
-	tsk->io_uring = NULL;
-}
+/*
+ * Function: void __io_uring_free
+ * Description: This function cleans up the `io_uring` resources associated with a task. It checks for any lingering entries in the task's `io_uring` context and releases the resources accordingly. If any errors related to allocation or entries are found, it warns the user and ensures proper resource release.
+ * Parameters:
+ *   - tsk: A pointer to the `task_struct` representing the task whose `io_uring` resources are being freed.
+ * Returns:
+ *   - This function does not return a value.
+ * Example usage:
+ *   - __io_uring_free(tsk);
+ */
+ void __io_uring_free(struct task_struct *tsk)
+ {
+	 struct io_uring_task *tctx = tsk->io_uring;
+	 struct io_tctx_node *node;
+	 unsigned long index;
+ 
+	 /*
+	  * Fault injection forcing allocation errors in the xa_store() path
+	  * can lead to xa_empty() returning false, even though no actual
+	  * node is stored in the xarray. Until that gets sorted out, attempt
+	  * an iteration here and warn if any entries are found.
+	  */
+	 xa_for_each(&tctx->xa, index, node) {
+		 WARN_ON_ONCE(1);
+		 break;
+	 }
+ 
+	 WARN_ON_ONCE(tctx->io_wq);
+	 WARN_ON_ONCE(tctx->cached_refs);
+ 
+	 percpu_counter_destroy(&tctx->inflight);
+	 kfree(tctx);
+	 tsk->io_uring = NULL;
+ } 
 
 __cold int io_uring_alloc_task_context(struct task_struct *task,
 				       struct io_ring_ctx *ctx)
@@ -102,6 +113,19 @@ __cold int io_uring_alloc_task_context(struct task_struct *task,
 	init_task_work(&tctx->task_work, tctx_task_work);
 	return 0;
 }
+
+
+/*
+ * Function: int __io_uring_add_tctx_node
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 int __io_uring_add_tctx_node(struct io_ring_ctx *ctx)
 {
@@ -144,6 +168,19 @@ int __io_uring_add_tctx_node(struct io_ring_ctx *ctx)
 	}
 	return 0;
 }
+
+
+/*
+ * Function: int __io_uring_add_tctx_node_from_submit
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 int __io_uring_add_tctx_node_from_submit(struct io_ring_ctx *ctx)
 {
@@ -193,7 +230,17 @@ __cold void io_uring_clean_tctx(struct io_uring_task *tctx)
 	struct io_tctx_node *node;
 	unsigned long index;
 
-	xa_for_each(&tctx->xa, index, node) {
+/*
+ * Function: xa_for_each
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+xa_for_each(&tctx->xa, index, node) {
 		io_uring_del_tctx_node(index);
 		cond_resched();
 	}
@@ -206,6 +253,18 @@ __cold void io_uring_clean_tctx(struct io_uring_task *tctx)
 		tctx->io_wq = NULL;
 	}
 }
+
+
+/*
+ * Function: void io_uring_unreg_ringfd
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
 
 void io_uring_unreg_ringfd(void)
 {
@@ -353,3 +412,4 @@ int io_ringfd_unregister(struct io_ring_ctx *ctx, void __user *__arg,
 
 	return i ? i : ret;
 }
+

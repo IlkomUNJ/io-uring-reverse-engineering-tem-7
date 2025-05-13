@@ -28,45 +28,89 @@ enum {
 };
 
 void io_sq_thread_unpark(struct io_sq_data *sqd)
-	__releases(&sqd->lock)
-{
-	WARN_ON_ONCE(sqd->thread == current);
+	
+/*
+ * Function: __releases
+ * Description: This function is used to release the lock and perform necessary actions to park or unpark the thread. It manages the state of the I/O submission queue (SQ) thread and ensures that the thread is properly synchronized. It clears the IO_SQ_THREAD_SHOULD_PARK bit and manages the atomic decrement of the park_pending counter. It also wakes up the thread if necessary.
+ * Parameters:
+ *   - sqd: A pointer to the io_sq_data structure that contains information about the submission queue (SQ) thread and its state.
+ * Returns:
+ *   - void: This function doesn't return any value. It performs actions on the internal state and handles synchronization.
+ * Example usage:
+ *   - __releases(&sqd->lock);  // Releases the lock and manages thread parking/unparking.
+ */
+ __releases(&sqd->lock)
+ {
+	 WARN_ON_ONCE(sqd->thread == current);
+ 
+	 /*
+	  * Do the dance but not conditional clear_bit() because it'd race with
+	  * other threads incrementing park_pending and setting the bit.
+	  */
+	 clear_bit(IO_SQ_THREAD_SHOULD_PARK, &sqd->state);
+	 if (atomic_dec_return(&sqd->park_pending))
+		 set_bit(IO_SQ_THREAD_SHOULD_PARK, &sqd->state);
+	 mutex_unlock(&sqd->lock);
+	 wake_up(&sqd->wait);
+ }
+ 
+ /*
+  * Function: __acquires
+  * Description: This function is used to acquire the lock and manage the parking state of the I/O submission queue (SQ) thread. It ensures that the thread is properly synchronized and the park_pending counter is incremented. It also sets the IO_SQ_THREAD_SHOULD_PARK bit and wakes up the thread if needed.
+  * Parameters:
+  *   - sqd: A pointer to the io_sq_data structure that contains information about the submission queue (SQ) thread and its state.
+  * Returns:
+  *   - void: This function doesn't return any value. It performs actions on the internal state and handles synchronization.
+  * Example usage:
+  *   - __acquires(&sqd->lock);  // Acquires the lock and manages the thread's parking state.
+  */
+ __acquires(&sqd->lock)
+ {
+	 WARN_ON_ONCE(data_race(sqd->thread) == current);
+ 
+	 atomic_inc(&sqd->park_pending);
+	 set_bit(IO_SQ_THREAD_SHOULD_PARK, &sqd->state);
+	 mutex_lock(&sqd->lock);
+	 if (sqd->thread)
+		 wake_up_process(sqd->thread);
+ }
+ 
+ /*
+  * Function: io_sq_thread_stop
+  * Description: This function stops the I/O submission queue (SQ) thread by setting the IO_SQ_THREAD_SHOULD_STOP bit in the thread's state. It ensures the thread is properly stopped and synchronizes the completion of the stop operation.
+  * Parameters:
+  *   - sqd: A pointer to the io_sq_data structure that contains information about the submission queue (SQ) thread and its state.
+  * Returns:
+  *   - void: This function doesn't return any value. It performs actions on the internal state and handles synchronization.
+  * Example usage:
+  *   - io_sq_thread_stop(&sqd);  // Stops the SQ thread by setting the stop flag and synchronizing its exit.
+  */
+ void io_sq_thread_stop(struct io_sq_data *sqd)
+ {
+	 WARN_ON_ONCE(sqd->thread == current);
+	 WARN_ON_ONCE(test_bit(IO_SQ_THREAD_SHOULD_STOP, &sqd->state));
+ 
+	 set_bit(IO_SQ_THREAD_SHOULD_STOP, &sqd->state);
+	 mutex_lock(&sqd->lock);
+	 if (sqd->thread)
+		 wake_up_process(sqd->thread);
+	 mutex_unlock(&sqd->lock);
+	 wait_for_completion(&sqd->exited);
+ }
+ 
 
-	/*
-	 * Do the dance but not conditional clear_bit() because it'd race with
-	 * other threads incrementing park_pending and setting the bit.
-	 */
-	clear_bit(IO_SQ_THREAD_SHOULD_PARK, &sqd->state);
-	if (atomic_dec_return(&sqd->park_pending))
-		set_bit(IO_SQ_THREAD_SHOULD_PARK, &sqd->state);
-	mutex_unlock(&sqd->lock);
-	wake_up(&sqd->wait);
-}
 
-void io_sq_thread_park(struct io_sq_data *sqd)
-	__acquires(&sqd->lock)
-{
-	WARN_ON_ONCE(data_race(sqd->thread) == current);
+/*
+ * Function: void io_put_sq_data
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
 
-	atomic_inc(&sqd->park_pending);
-	set_bit(IO_SQ_THREAD_SHOULD_PARK, &sqd->state);
-	mutex_lock(&sqd->lock);
-	if (sqd->thread)
-		wake_up_process(sqd->thread);
-}
-
-void io_sq_thread_stop(struct io_sq_data *sqd)
-{
-	WARN_ON_ONCE(sqd->thread == current);
-	WARN_ON_ONCE(test_bit(IO_SQ_THREAD_SHOULD_STOP, &sqd->state));
-
-	set_bit(IO_SQ_THREAD_SHOULD_STOP, &sqd->state);
-	mutex_lock(&sqd->lock);
-	if (sqd->thread)
-		wake_up_process(sqd->thread);
-	mutex_unlock(&sqd->lock);
-	wait_for_completion(&sqd->exited);
-}
 
 void io_put_sq_data(struct io_sq_data *sqd)
 {
@@ -83,11 +127,32 @@ static __cold void io_sqd_update_thread_idle(struct io_sq_data *sqd)
 	struct io_ring_ctx *ctx;
 	unsigned sq_thread_idle = 0;
 
-	list_for_each_entry(ctx, &sqd->ctx_list, sqd_list)
+
+/*
+ * Function: list_for_each_entry
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+list_for_each_entry(ctx, &sqd->ctx_list, sqd_list)
 		sq_thread_idle = max(sq_thread_idle, ctx->sq_thread_idle);
 	sqd->sq_thread_idle = sq_thread_idle;
 }
 
+/*
+ * Function: void io_sq_thread_finish
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
 void io_sq_thread_finish(struct io_ring_ctx *ctx)
 {
 	struct io_sq_data *sqd = ctx->sq_data;
@@ -204,9 +269,33 @@ static bool io_sqd_handle_event(struct io_sq_data *sqd)
 	struct ksignal ksig;
 
 	if (test_bit(IO_SQ_THREAD_SHOULD_PARK, &sqd->state) ||
-	    signal_pending(current)) {
+	
+
+/*
+ * Function: signal_pending
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+signal_pending(current)) {
 		mutex_unlock(&sqd->lock);
-		if (signal_pending(current))
+		if (
+
+/*
+ * Function: signal_pending
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+signal_pending(current))
 			did_sig = get_signal(&ksig);
 		wait_event(sqd->wait, !atomic_read(&sqd->park_pending));
 		mutex_lock(&sqd->lock);
@@ -300,7 +389,19 @@ static int io_sq_thread(void *data)
 	while (1) {
 		bool cap_entries, sqt_spin = false;
 
-		if (io_sqd_events_pending(sqd) || signal_pending(current)) {
+		if (io_sqd_events_pending(sqd) || 
+
+/*
+ * Function: signal_pending
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+signal_pending(current)) {
 			if (io_sqd_handle_event(sqd))
 				break;
 			timeout = jiffies + sqd->sq_thread_idle;
@@ -308,7 +409,19 @@ static int io_sq_thread(void *data)
 
 		cap_entries = !list_is_singular(&sqd->ctx_list);
 		getrusage(current, RUSAGE_SELF, &start);
-		list_for_each_entry(ctx, &sqd->ctx_list, sqd_list) {
+		
+
+/*
+ * Function: list_for_each_entry
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+list_for_each_entry(ctx, &sqd->ctx_list, sqd_list) {
 			int ret = __io_sq_thread(ctx, cap_entries);
 
 			if (!sqt_spin && (ret > 0 || !wq_list_empty(&ctx->iopoll_list)))
@@ -317,7 +430,18 @@ static int io_sq_thread(void *data)
 		if (io_sq_tw(&retry_list, IORING_TW_CAP_ENTRIES_VALUE))
 			sqt_spin = true;
 
-		list_for_each_entry(ctx, &sqd->ctx_list, sqd_list)
+
+/*
+ * Function: list_for_each_entry
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+list_for_each_entry(ctx, &sqd->ctx_list, sqd_list)
 			if (io_napi(ctx))
 				io_napi_sqpoll_busy_poll(ctx);
 
@@ -339,7 +463,19 @@ static int io_sq_thread(void *data)
 		if (!io_sqd_events_pending(sqd) && !io_sq_tw_pending(retry_list)) {
 			bool needs_sched = true;
 
-			list_for_each_entry(ctx, &sqd->ctx_list, sqd_list) {
+			
+
+/*
+ * Function: list_for_each_entry
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+list_for_each_entry(ctx, &sqd->ctx_list, sqd_list) {
 				atomic_or(IORING_SQ_NEED_WAKEUP,
 						&ctx->rings->sq_flags);
 				if ((ctx->flags & IORING_SETUP_IOPOLL) &&
@@ -366,7 +502,19 @@ static int io_sq_thread(void *data)
 				mutex_lock(&sqd->lock);
 				sqd->sq_cpu = raw_smp_processor_id();
 			}
-			list_for_each_entry(ctx, &sqd->ctx_list, sqd_list)
+			
+/*
+ * Function: list_for_each_entry
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+list_for_each_entry(ctx, &sqd->ctx_list, sqd_list)
 				atomic_andnot(IORING_SQ_NEED_WAKEUP,
 						&ctx->rings->sq_flags);
 		}
@@ -380,7 +528,20 @@ static int io_sq_thread(void *data)
 
 	io_uring_cancel_generic(true, sqd);
 	sqd->thread = NULL;
-	list_for_each_entry(ctx, &sqd->ctx_list, sqd_list)
+	
+
+
+/*
+ * Function: list_for_each_entry
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+list_for_each_entry(ctx, &sqd->ctx_list, sqd_list)
 		atomic_or(IORING_SQ_NEED_WAKEUP, &ctx->rings->sq_flags);
 	io_run_task_work();
 	mutex_unlock(&sqd->lock);
@@ -389,6 +550,16 @@ err_out:
 	do_exit(0);
 }
 
+/*
+ * Function: void io_sqpoll_wait_sq
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
 void io_sqpoll_wait_sq(struct io_ring_ctx *ctx)
 {
 	DEFINE_WAIT(wait);
@@ -401,7 +572,19 @@ void io_sqpoll_wait_sq(struct io_ring_ctx *ctx)
 		if (!io_sqring_full(ctx))
 			break;
 		schedule();
-	} while (!signal_pending(current));
+	} while (!
+
+/*
+ * Function: signal_pending
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+signal_pending(current));
 
 	finish_wait(&ctx->sqo_sq_wait, &wait);
 }
@@ -524,3 +707,4 @@ __cold int io_sqpoll_wq_cpu_affinity(struct io_ring_ctx *ctx,
 
 	return ret;
 }
+

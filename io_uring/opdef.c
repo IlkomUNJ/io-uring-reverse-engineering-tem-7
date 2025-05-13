@@ -824,13 +824,28 @@ const char *io_uring_get_opcode(u8 opcode)
 	return "INVALID";
 }
 
-bool io_uring_op_supported(u8 opcode)
-{
-	if (opcode < IORING_OP_LAST &&
-	    io_issue_defs[opcode].prep != io_eopnotsupp_prep)
-		return true;
-	return false;
-}
+/*
+ * Function: bool io_uring_op_supported
+ * Description: This function checks whether a specific io_uring operation is supported.
+ * It does so by verifying if the operation's opcode is valid and if the associated
+ * preparation function is not marked as unsupported (`io_eopnotsupp_prep`).
+ * Parameters:
+ *   - opcode: An 8-bit unsigned integer representing the operation code (opcode)
+ *             for the io_uring operation. The opcode determines the type of the operation.
+ * Returns:
+ *   - `true` if the operation is supported.
+ *   - `false` if the operation is not supported.
+ * Example usage:
+ *   - bool supported = io_uring_op_supported(IORING_OP_READ);
+ */
+ bool io_uring_op_supported(u8 opcode)
+ {
+	 if (opcode < IORING_OP_LAST &&
+		 io_issue_defs[opcode].prep != io_eopnotsupp_prep)
+		 return true;
+	 return false;
+ }
+ 
 
 void __init io_uring_optable_init(void)
 {
@@ -846,3 +861,4 @@ void __init io_uring_optable_init(void)
 		WARN_ON_ONCE(!io_cold_defs[i].name);
 	}
 }
+

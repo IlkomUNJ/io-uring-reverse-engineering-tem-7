@@ -74,18 +74,37 @@ out:
 	return ret;
 }
 
-int io_unregister_personality(struct io_ring_ctx *ctx, unsigned id)
-{
-	const struct cred *creds;
 
-	creds = xa_erase(&ctx->personalities, id);
-	if (creds) {
-		put_cred(creds);
-		return 0;
-	}
-
-	return -EINVAL;
-}
+/*
+ * Function: int io_unregister_personality
+ * Description: This function unregisters a personality associated with the given `id` from the I/O ring context. It looks up the `id` in the `personalities` hash table, and if found, it removes the entry and frees the associated credentials (`creds`). If the personality with the given `id` is not found, it returns an error.
+ * Parameters:
+ *   - ctx: A pointer to the `io_ring_ctx` structure, which holds the context for the I/O ring. This structure contains the `personalities` hash table where different personalities are registered.
+ *   - id: The unique identifier for the personality to be unregistered. This ID is used to locate the corresponding entry in the `personalities` hash table.
+ * Returns:
+ *   - `0` on success if the personality is unregistered successfully.
+ *   - `-EINVAL` if the personality with the given `id` is not found in the hash table.
+ * Example usage:
+ *   - int result = io_unregister_personality(ctx, 123);
+ *     if (result == 0) {
+ *         // Personality unregistered successfully
+ *     } else {
+ *         // Failed to unregister personality (e.g., ID not found)
+ *     }
+ */
+ int io_unregister_personality(struct io_ring_ctx *ctx, unsigned id)
+ {
+	 const struct cred *creds;
+ 
+	 creds = xa_erase(&ctx->personalities, id);
+	 if (creds) {
+		 put_cred(creds);
+		 return 0;
+	 }
+ 
+	 return -EINVAL;
+ }
+ 
 
 
 static int io_register_personality(struct io_ring_ctx *ctx)
@@ -256,7 +275,40 @@ static __cold int io_unregister_iowq_aff(struct io_ring_ctx *ctx)
 
 static __cold int io_register_iowq_max_workers(struct io_ring_ctx *ctx,
 					       void __user *arg)
-	__must_hold(&ctx->uring_lock)
+	
+/*
+ * Function: __must_hold
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+/*
+ * Function: __must_hold
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+/*
+ * Function: __must_hold
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+__must_hold(&ctx->uring_lock)
 {
 	struct io_tctx_node *node;
 	struct io_uring_task *tctx = NULL;
@@ -319,7 +371,20 @@ static __cold int io_register_iowq_max_workers(struct io_ring_ctx *ctx,
 		return 0;
 
 	/* now propagate the restriction to all registered users */
-	list_for_each_entry(node, &ctx->tctx_list, ctx_node) {
+	
+/*
+ * Function: list_for_each_entry
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
+list_for_each_entry(node, &ctx->tctx_list, ctx_node) {
 		tctx = node->task->io_uring;
 		if (WARN_ON_ONCE(!tctx->io_wq))
 			continue;
@@ -629,7 +694,19 @@ static int io_register_mem_region(struct io_ring_ctx *ctx, void __user *uarg)
 static int __io_uring_register(struct io_ring_ctx *ctx, unsigned opcode,
 			       void __user *arg, unsigned nr_args)
 	__releases(ctx->uring_lock)
-	__acquires(ctx->uring_lock)
+	
+/*
+ * Function: __acquires
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+__acquires(ctx->uring_lock)
 {
 	int ret;
 
@@ -932,3 +1009,4 @@ SYSCALL_DEFINE4(io_uring_register, unsigned int, fd, unsigned int, opcode,
 	fput(file);
 	return ret;
 }
+

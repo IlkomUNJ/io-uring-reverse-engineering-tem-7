@@ -6,18 +6,30 @@
 #include <linux/io_uring_types.h>
 #include "rsrc.h"
 
+/**
+ * allocate and initialize file table for io_uring context
+ */
 bool io_alloc_file_tables(struct io_ring_ctx *ctx, struct io_file_table *table, unsigned nr_files);
+/**
+ * free resources associated with a file table in io_uring context
+ */
 void io_free_file_tables(struct io_ring_ctx *ctx, struct io_file_table *table);
 
 int io_fixed_fd_install(struct io_kiocb *req, unsigned int issue_flags,
 			struct file *file, unsigned int file_slot);
 int __io_fixed_fd_install(struct io_ring_ctx *ctx, struct file *file,
 				unsigned int file_slot);
+/**
+ * remove a file from the fixed file table at given offset
+ */
 int io_fixed_fd_remove(struct io_ring_ctx *ctx, unsigned int offset);
 
 int io_register_file_alloc_range(struct io_ring_ctx *ctx,
 				 struct io_uring_file_index_range __user *arg);
 
+/**
+ * get request flags associated with a file
+ */
 io_req_flags_t io_file_get_flags(struct file *file);
 
 static inline void io_file_bitmap_clear(struct io_file_table *table, int bit)

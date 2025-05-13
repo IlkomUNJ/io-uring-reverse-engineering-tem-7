@@ -40,6 +40,9 @@ enum {
 	IOU_REQUEUE		= -3072,
 };
 
+/*
+* Data structure for managing io_uring wait queue, timeouts, and optional busy polling 
+*/
 struct io_wait_queue {
 	struct wait_queue_entry wq;
 	struct io_ring_ctx *ctx;
@@ -57,6 +60,9 @@ struct io_wait_queue {
 #endif
 };
 
+/**
+ * determine whether a wait queue should wake based on CQ tail and timeout
+ */
 static inline bool io_should_wake(struct io_wait_queue *iowq)
 {
 	struct io_ring_ctx *ctx = iowq->ctx;
@@ -123,6 +129,9 @@ bool io_match_task_safe(struct io_kiocb *head, struct io_uring_task *tctx,
 
 void io_activate_pollwq(struct io_ring_ctx *ctx);
 
+/**
+ * assert that the correct completion queue locks are held
+ */
 static inline void io_lockdep_assert_cq_locked(struct io_ring_ctx *ctx)
 {
 #if defined(CONFIG_PROVE_LOCKING)
@@ -148,16 +157,25 @@ static inline void io_lockdep_assert_cq_locked(struct io_ring_ctx *ctx)
 #endif
 }
 
+/**
+ * check if the ring context is in compat (32-bit) mode
+ */
 static inline bool io_is_compat(struct io_ring_ctx *ctx)
 {
 	return IS_ENABLED(CONFIG_COMPAT) && unlikely(ctx->compat);
 }
 
+/**
+ * add task_work item for request with default flags
+ */
 static inline void io_req_task_work_add(struct io_kiocb *req)
 {
 	__io_req_task_work_add(req, 0);
 }
 
+/**
+ * flush completions if needed from submit state
+ */
 static inline void io_submit_flush_completions(struct io_ring_ctx *ctx)
 {
 	if (!wq_list_empty(&ctx->submit_state.compl_reqs) ||
@@ -168,6 +186,9 @@ static inline void io_submit_flush_completions(struct io_ring_ctx *ctx)
 #define io_for_each_link(pos, head) \
 	for (pos = (head); pos; pos = pos->link)
 
+/**
+ * retrieve a completion queue entry, handling overflow if needed
+ */
 static inline bool io_get_cqe_overflow(struct io_ring_ctx *ctx,
 					struct io_uring_cqe **ret,
 					bool overflow)
@@ -186,11 +207,17 @@ static inline bool io_get_cqe_overflow(struct io_ring_ctx *ctx,
 	return true;
 }
 
+/**
+ * get a completion queue entry without handling overflow
+ */
 static inline bool io_get_cqe(struct io_ring_ctx *ctx, struct io_uring_cqe **ret)
 {
 	return io_get_cqe_overflow(ctx, ret, false);
 }
 
+/**
+ * get an uncommitted CQE and mark it for deferred flush
+ */
 static inline bool io_defer_get_uncommited_cqe(struct io_ring_ctx *ctx,
 					       struct io_uring_cqe **cqe_ret)
 {
@@ -226,6 +253,9 @@ static __always_inline bool io_fill_cqe_req(struct io_ring_ctx *ctx,
 	return true;
 }
 
+/**
+ * mark the request as failed and adjust CQE skip flags
+ */
 static inline void req_set_fail(struct io_kiocb *req)
 {
 	req->flags |= REQ_F_FAIL;
@@ -235,12 +265,18 @@ static inline void req_set_fail(struct io_kiocb *req)
 	}
 }
 
+/**
+ * set result and flags in the request’s CQE
+ */
 static inline void io_req_set_res(struct io_kiocb *req, s32 res, u32 cflags)
 {
 	req->cqe.res = res;
 	req->cqe.flags = cflags;
 }
 
+/**
+ * allocate async data for a request using cache or kmalloc
+ */
 static inline void *io_uring_alloc_async_data(struct io_alloc_cache *cache,
 					      struct io_kiocb *req)
 {
@@ -419,6 +455,9 @@ static inline void io_commit_cqring_flush(struct io_ring_ctx *ctx)
 		__io_commit_cqring_flush(ctx);
 }
 
+/*
+* Decrement cached task references and refill if necessary 
+*/
 static inline void io_get_task_refs(int nr)
 {
 	struct io_uring_task *tctx = current->io_uring;
@@ -428,6 +467,9 @@ static inline void io_get_task_refs(int nr)
 		io_task_refs_refill(tctx);
 }
 
+/*
+* Check if request cache in submit state is empty 
+*/
 static inline bool io_req_cache_empty(struct io_ring_ctx *ctx)
 {
 	return !ctx->submit_state.free_list.next;
@@ -435,6 +477,9 @@ static inline bool io_req_cache_empty(struct io_ring_ctx *ctx)
 
 extern struct kmem_cache *req_cachep;
 
+/*
+* Extract a request object from the free list in submit state 
+*/
 static inline struct io_kiocb *io_extract_req(struct io_ring_ctx *ctx)
 {
 	struct io_kiocb *req;
