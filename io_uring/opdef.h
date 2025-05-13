@@ -42,10 +42,24 @@ struct io_cold_def {
 	void (*fail)(struct io_kiocb *);
 };
 
+/**
+ * array of definitions describing issue and prep logic for each io_uring opcode
+ */
 extern const struct io_issue_def io_issue_defs[];
+
+/**
+ * array of cold-path operation definitions for cleanup and failure handling
+ */
 extern const struct io_cold_def io_cold_defs[];
 
+/**
+ * check if the given opcode is supported by the current io_uring implementation
+ */
 bool io_uring_op_supported(u8 opcode);
 
+/**
+ * initialize the io_uring operation definition tables
+ */
 void io_uring_optable_init(void);
+
 #endif

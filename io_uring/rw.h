@@ -30,21 +30,92 @@ struct io_async_rw {
 	);
 };
 
+/**
+ * prepare a fixed-buffer read request from io_uring_sqe
+ */
 int io_prep_read_fixed(struct io_kiocb *req, const struct io_uring_sqe *sqe);
+
+/**
+ * prepare a fixed-buffer write request from io_uring_sqe
+ */
 int io_prep_write_fixed(struct io_kiocb *req, const struct io_uring_sqe *sqe);
+
+/**
+ * prepare a fixed-buffer vectored read request
+ */
 int io_prep_readv_fixed(struct io_kiocb *req, const struct io_uring_sqe *sqe);
+
+/**
+ * prepare a fixed-buffer vectored write request
+ */
 int io_prep_writev_fixed(struct io_kiocb *req, const struct io_uring_sqe *sqe);
+
+/**
+ * prepare a vectored read operation using userspace iovec
+ */
 int io_prep_readv(struct io_kiocb *req, const struct io_uring_sqe *sqe);
+
+/**
+ * prepare a vectored write operation using userspace iovec
+ */
 int io_prep_writev(struct io_kiocb *req, const struct io_uring_sqe *sqe);
+
+/**
+ * prepare a single-buffer read operation
+ */
 int io_prep_read(struct io_kiocb *req, const struct io_uring_sqe *sqe);
+
+/**
+ * prepare a single-buffer write operation
+ */
 int io_prep_write(struct io_kiocb *req, const struct io_uring_sqe *sqe);
+
+/**
+ * issue a standard read operation using io_kiocb
+ */
 int io_read(struct io_kiocb *req, unsigned int issue_flags);
+
+/**
+ * issue a standard write operation using io_kiocb
+ */
 int io_write(struct io_kiocb *req, unsigned int issue_flags);
+
+/**
+ * issue a fixed-buffer read operation
+ */
 int io_read_fixed(struct io_kiocb *req, unsigned int issue_flags);
+
+/**
+ * issue a fixed-buffer write operation
+ */
 int io_write_fixed(struct io_kiocb *req, unsigned int issue_flags);
+
+/**
+ * clean up any iovec or resources used in readv/writev operations
+ */
 void io_readv_writev_cleanup(struct io_kiocb *req);
+
+/**
+ * handle failure of read/write operation and complete with error
+ */
 void io_rw_fail(struct io_kiocb *req);
+
+/**
+ * complete the read/write operation and run any dependent tasks
+ */
 void io_req_rw_complete(struct io_kiocb *req, io_tw_token_t tw);
+
+/**
+ * prepare a multishot read operation from io_uring_sqe
+ */
 int io_read_mshot_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe);
+
+/**
+ * issue a multishot read operation
+ */
 int io_read_mshot(struct io_kiocb *req, unsigned int issue_flags);
+
+/**
+ * free any cache used by read/write operations
+ */
 void io_rw_cache_free(const void *entry);
