@@ -82,100 +82,172 @@ static int __io_openat_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe
 	return 0;
 }
 
-int io_openat_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
-{
-	struct io_open *open = io_kiocb_to_cmd(req, struct io_open);
-	u64 mode = READ_ONCE(sqe->len);
-	u64 flags = READ_ONCE(sqe->open_flags);
 
-	open->how = build_open_how(flags, mode);
-	return __io_openat_prep(req, sqe);
-}
+/*
+ * Function: int io_openat_prep
+ * Description: This function prepares an I/O request to open a file using the io_uring system call. 
+ * It retrieves the flags and mode from the submission queue entry (SQE) and sets them up for the 
+ * file open operation.
+ * Parameters:
+ *   - req: A pointer to the I/O control block (io_kiocb) that represents the I/O request.
+ *   - sqe: A pointer to the submission queue entry (SQE) that contains the details of the I/O operation.
+ * Returns:
+ *   - 0 on success, or a negative error code on failure (e.g., -EINVAL for invalid parameters).
+ * Example usage:
+ *   - int ret = io_openat_prep(req, sqe);
+ */
 
-int io_openat2_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
-{
-	struct io_open *open = io_kiocb_to_cmd(req, struct io_open);
-	struct open_how __user *how;
-	size_t len;
-	int ret;
-
-	how = u64_to_user_ptr(READ_ONCE(sqe->addr2));
-	len = READ_ONCE(sqe->len);
-	if (len < OPEN_HOW_SIZE_VER0)
-		return -EINVAL;
-
-	ret = copy_struct_from_user(&open->how, sizeof(open->how), how, len);
-	if (ret)
-		return ret;
-
-	return __io_openat_prep(req, sqe);
-}
-
-int io_openat2(struct io_kiocb *req, unsigned int issue_flags)
-{
-	struct io_open *open = io_kiocb_to_cmd(req, struct io_open);
-	struct open_flags op;
-	struct file *file;
-	bool resolve_nonblock, nonblock_set;
-	bool fixed = !!open->file_slot;
-	int ret;
-
-	ret = build_open_flags(&open->how, &op);
-	if (ret)
-		goto err;
-	nonblock_set = op.open_flag & O_NONBLOCK;
-	resolve_nonblock = open->how.resolve & RESOLVE_CACHED;
-	if (issue_flags & IO_URING_F_NONBLOCK) {
-		WARN_ON_ONCE(io_openat_force_async(open));
-		op.lookup_flags |= LOOKUP_CACHED;
-		op.open_flag |= O_NONBLOCK;
-	}
-
-	if (!fixed) {
-		ret = __get_unused_fd_flags(open->how.flags, open->nofile);
-		if (ret < 0)
-			goto err;
-	}
-
-	file = do_filp_open(open->dfd, open->filename, &op);
-	if (IS_ERR(file)) {
-		/*
-		 * We could hang on to this 'fd' on retrying, but seems like
-		 * marginal gain for something that is now known to be a slower
-		 * path. So just put it, and we'll get a new one when we retry.
-		 */
-		if (!fixed)
-			put_unused_fd(ret);
-
-		ret = PTR_ERR(file);
-		/* only retry if RESOLVE_CACHED wasn't already set by application */
-		if (ret == -EAGAIN &&
-		    (!resolve_nonblock && (issue_flags & IO_URING_F_NONBLOCK)))
-			return -EAGAIN;
-		goto err;
-	}
-
-	if ((issue_flags & IO_URING_F_NONBLOCK) && !nonblock_set)
-		file->f_flags &= ~O_NONBLOCK;
-
-	if (!fixed)
-		fd_install(ret, file);
-	else
-		ret = io_fixed_fd_install(req, issue_flags, file,
-						open->file_slot);
-err:
-	putname(open->filename);
-	req->flags &= ~REQ_F_NEED_CLEANUP;
-	if (ret < 0)
-		req_set_fail(req);
-	io_req_set_res(req, ret, 0);
-	return IOU_OK;
-}
-
-int io_openat(struct io_kiocb *req, unsigned int issue_flags)
-{
+ int io_openat_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+ {
+	 struct io_open *open = io_kiocb_to_cmd(req, struct io_open);
+	 u64 mode = READ_ONCE(sqe->len);
+	 u64 flags = READ_ONCE(sqe->open_flags);
+ 
+	 open->how = build_open_how(flags, mode);
+	 return __io_openat_prep(req, sqe);
+ }
+ 
+ 
+ /*
+  * Function: int io_openat2_prep
+  * Description: This function prepares an I/O request for the io_uring openat2 operation. 
+  * It copies the open file details from the user space into the internal structure and 
+  * performs necessary validation before proceeding with the file open operation.
+  * Parameters:
+  *   - req: A pointer to the I/O control block (io_kiocb) representing the I/O request.
+  *   - sqe: A pointer to the submission queue entry (SQE) that contains the details of the I/O operation.
+  * Returns:
+  *   - 0 on success, or a negative error code on failure (e.g., -EINVAL for invalid parameters).
+  * Example usage:
+  *   - int ret = io_openat2_prep(req, sqe);
+  */
+ 
+ int io_openat2_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+ {
+	 struct io_open *open = io_kiocb_to_cmd(req, struct io_open);
+	 struct open_how __user *how;
+	 size_t len;
+	 int ret;
+ 
+	 how = u64_to_user_ptr(READ_ONCE(sqe->addr2));
+	 len = READ_ONCE(sqe->len);
+	 if (len < OPEN_HOW_SIZE_VER0)
+		 return -EINVAL;
+ 
+	 ret = copy_struct_from_user(&open->how, sizeof(open->how), how, len);
+	 if (ret)
+		 return ret;
+ 
+	 return __io_openat_prep(req, sqe);
+ }
+ 
+ 
+ /*
+  * Function: int io_openat2
+  * Description: This function handles the actual opening of a file for the io_uring openat2 operation. 
+  * It builds the necessary flags for the open operation, attempts to open the file, and handles 
+  * errors such as file descriptor allocation, file opening, and non-blocking behavior.
+  * Parameters:
+  *   - req: A pointer to the I/O control block (io_kiocb) representing the I/O request.
+  *   - issue_flags: Flags indicating how the I/O operation should be executed (e.g., non-blocking).
+  * Returns:
+  *   - 0 on success, or a negative error code on failure (e.g., -EBADF for invalid file descriptor).
+  * Example usage:
+  *   - int ret = io_openat2(req, issue_flags);
+  */
+ 
+ int io_openat2(struct io_kiocb *req, unsigned int issue_flags)
+ {
+	 struct io_open *open = io_kiocb_to_cmd(req, struct io_open);
+	 struct open_flags op;
+	 struct file *file;
+	 bool resolve_nonblock, nonblock_set;
+	 bool fixed = !!open->file_slot;
+	 int ret;
+ 
+	 ret = build_open_flags(&open->how, &op);
+	 if (ret)
+		 goto err;
+	 nonblock_set = op.open_flag & O_NONBLOCK;
+	 resolve_nonblock = open->how.resolve & RESOLVE_CACHED;
+	 if (issue_flags & IO_URING_F_NONBLOCK) {
+		 WARN_ON_ONCE(io_openat_force_async(open));
+		 op.lookup_flags |= LOOKUP_CACHED;
+		 op.open_flag |= O_NONBLOCK;
+	 }
+ 
+	 if (!fixed) {
+		 ret = __get_unused_fd_flags(open->how.flags, open->nofile);
+		 if (ret < 0)
+			 goto err;
+	 }
+ 
+	 file = do_filp_open(open->dfd, open->filename, &op);
+	 if (IS_ERR(file)) {
+		 /*
+		  * We could hang on to this 'fd' on retrying, but seems like
+		  * marginal gain for something that is now known to be a slower
+		  * path. So just put it, and we'll get a new one when we retry.
+		  */
+		 if (!fixed)
+			 put_unused_fd(ret);
+ 
+		 ret = PTR_ERR(file);
+		 /* only retry if RESOLVE_CACHED wasn't already set by application */
+		 if (ret == -EAGAIN &&
+			 (!resolve_nonblock && (issue_flags & IO_URING_F_NONBLOCK)))
+			 return -EAGAIN;
+		 goto err;
+	 }
+ 
+	 if ((issue_flags & IO_URING_F_NONBLOCK) && !nonblock_set)
+		 file->f_flags &= ~O_NONBLOCK;
+ 
+	 if (!fixed)
+		 fd_install(ret, file);
+	 else
+		 ret = io_fixed_fd_install(req, issue_flags, file,
+						 open->file_slot);
+ err:
+	 putname(open->filename);
+	 req->flags &= ~REQ_F_NEED_CLEANUP;
+	 if (ret < 0)
+		 req_set_fail(req);
+	 io_req_set_res(req, ret, 0);
+	 return IOU_OK;
+ }
+ 
+ 
+ /*
+  * Function: int io_openat
+  * Description: This function handles the io_uring openat operation. It attempts to open a file 
+  * with the specified flags, and processes the result of the operation, including error handling.
+  * Parameters:
+  *   - req: A pointer to the I/O control block (io_kiocb) representing the I/O request.
+  *   - issue_flags: Flags indicating how the I/O operation should be executed.
+  * Returns:
+  *   - 0 on success, or a negative error code on failure.
+  * Example usage:
+  *   - int ret = io_openat(req, issue_flags);
+  */
+ 
+ int io_openat(struct io_kiocb *req, unsigned int issue_flags)
+ {
 	return io_openat2(req, issue_flags);
 }
+
+
+/*
+ * Function: void io_open_cleanup
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 void io_open_cleanup(struct io_kiocb *req)
 {
@@ -204,6 +276,19 @@ static inline int io_close_fixed(struct io_kiocb *req, unsigned int issue_flags)
 	return __io_close_fixed(req->ctx, issue_flags, close->file_slot - 1);
 }
 
+
+/*
+ * Function: int io_close_prep
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_close_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct io_close *close = io_kiocb_to_cmd(req, struct io_close);
@@ -220,6 +305,18 @@ int io_close_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 
 	return 0;
 }
+
+
+/*
+ * Function: int io_close
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
 
 int io_close(struct io_kiocb *req, unsigned int issue_flags)
 {
@@ -260,6 +357,19 @@ err:
 	return IOU_OK;
 }
 
+
+/*
+ * Function: int io_install_fixed_fd_prep
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_install_fixed_fd_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct io_fixed_install *ifi;
@@ -290,6 +400,18 @@ int io_install_fixed_fd_prep(struct io_kiocb *req, const struct io_uring_sqe *sq
 	return 0;
 }
 
+
+/*
+ * Function: int io_install_fixed_fd
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 int io_install_fixed_fd(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_fixed_install *ifi;
@@ -302,3 +424,4 @@ int io_install_fixed_fd(struct io_kiocb *req, unsigned int issue_flags)
 	io_req_set_res(req, ret, 0);
 	return IOU_OK;
 }
+
