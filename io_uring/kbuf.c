@@ -88,33 +88,66 @@ static int io_buffer_add_list(struct io_ring_ctx *ctx,
 	return xa_err(xa_store(&ctx->io_bl_xa, bgid, bl, GFP_KERNEL));
 }
 
-void io_kbuf_drop_legacy(struct io_kiocb *req)
-{
-	if (WARN_ON_ONCE(!(req->flags & REQ_F_BUFFER_SELECTED)))
-		return;
-	req->buf_index = req->kbuf->bgid;
-	req->flags &= ~REQ_F_BUFFER_SELECTED;
-	kfree(req->kbuf);
-	req->kbuf = NULL;
-}
 
-bool io_kbuf_recycle_legacy(struct io_kiocb *req, unsigned issue_flags)
-{
-	struct io_ring_ctx *ctx = req->ctx;
-	struct io_buffer_list *bl;
-	struct io_buffer *buf;
+/*
+ * Function: void io_kbuf_drop_legacy
+ * Description: This function drops a legacy buffer that was previously selected for the I/O operation. It performs a check to ensure that the buffer is marked as selected, then it updates the buffer's index, clears the selected flag, and frees the buffer. Finally, it sets the buffer pointer to `NULL` to avoid using a freed memory reference.
+ * Parameters:
+ *   - req: A pointer to the `io_kiocb` structure, which represents the I/O control block for the request.
+ * Returns:
+ *   - This function does not return any value (`void`).
+ * Example usage:
+ *   - The function can be used when the legacy buffer needs to be released after completing the I/O operation:
+ *     ```
+ *     io_kbuf_drop_legacy(req);
+ *     ```
+ *     In this example, `req` represents the I/O request being processed.
+ */
+ void io_kbuf_drop_legacy(struct io_kiocb *req)
+ {
+	 if (WARN_ON_ONCE(!(req->flags & REQ_F_BUFFER_SELECTED)))
+		 return;
+	 req->buf_index = req->kbuf->bgid;
+	 req->flags &= ~REQ_F_BUFFER_SELECTED;
+	 kfree(req->kbuf);
+	 req->kbuf = NULL;
+ }
+ 
 
-	io_ring_submit_lock(ctx, issue_flags);
 
-	buf = req->kbuf;
-	bl = io_buffer_get_list(ctx, buf->bgid);
-	list_add(&buf->list, &bl->buf_list);
-	req->flags &= ~REQ_F_BUFFER_SELECTED;
-	req->buf_index = buf->bgid;
-
-	io_ring_submit_unlock(ctx, issue_flags);
-	return true;
-}
+/*
+ * Function: bool io_kbuf_recycle_legacy
+ * Description: This function attempts to recycle a legacy buffer and add it back to the buffer list for future use. It ensures that the buffer is available to be reused and updates the buffer's index. The recycling process also clears the selected buffer flag to allow other tasks to use it.
+ * Parameters:
+ *   - req: A pointer to the `io_kiocb` structure, representing the I/O control block for the request.
+ *   - issue_flags: Flags used during the issue process to indicate specific conditions or behaviors.
+ * Returns:
+ *   - Returns `true` if the buffer was successfully recycled, otherwise `false`.
+ * Example usage:
+ *   - The function can be used when recycling a buffer after completing an I/O operation:
+ *     ```
+ *     bool result = io_kbuf_recycle_legacy(req, issue_flags);
+ *     ```
+ *     Here, `req` represents the I/O request, and `issue_flags` indicate the flags for the operation.
+ */
+ bool io_kbuf_recycle_legacy(struct io_kiocb *req, unsigned issue_flags)
+ {
+	 struct io_ring_ctx *ctx = req->ctx;
+	 struct io_buffer_list *bl;
+	 struct io_buffer *buf;
+ 
+	 io_ring_submit_lock(ctx, issue_flags);
+ 
+	 buf = req->kbuf;
+	 bl = io_buffer_get_list(ctx, buf->bgid);
+	 list_add(&buf->list, &bl->buf_list);
+	 req->flags &= ~REQ_F_BUFFER_SELECTED;
+	 req->buf_index = buf->bgid;
+ 
+	 io_ring_submit_unlock(ctx, issue_flags);
+	 return true;
+ }
+ 
 
 static void __user *io_provided_buffer_select(struct io_kiocb *req, size_t *len,
 					      struct io_buffer_list *bl)
@@ -327,28 +360,45 @@ out_unlock:
 	return ret;
 }
 
-int io_buffers_peek(struct io_kiocb *req, struct buf_sel_arg *arg)
-{
-	struct io_ring_ctx *ctx = req->ctx;
-	struct io_buffer_list *bl;
-	int ret;
 
-	lockdep_assert_held(&ctx->uring_lock);
-
-	bl = io_buffer_get_list(ctx, req->buf_index);
-	if (unlikely(!bl))
-		return -ENOENT;
-
-	if (bl->flags & IOBL_BUF_RING) {
-		ret = io_ring_buffers_peek(req, arg, bl);
-		if (ret > 0)
-			req->flags |= REQ_F_BUFFERS_COMMIT;
-		return ret;
-	}
-
-	/* don't support multiple buffer selections for legacy */
-	return io_provided_buffers_select(req, &arg->max_len, bl, arg->iovs);
-}
+/*
+ * Function: int io_buffers_peek
+ * Description: This function peeks into the provided buffer list and retrieves a buffer for the I/O operation. It handles checking the availability of buffers and selecting the appropriate buffer to use. The function can handle multiple buffers if needed and ensures the buffers are valid and ready for processing.
+ * Parameters:
+ *   - req: A pointer to the `io_kiocb` structure, representing the I/O control block for the request.
+ *   - arg: A pointer to the `buf_sel_arg` structure, which contains arguments and configuration for selecting the buffer.
+ * Returns:
+ *   - Returns the number of buffers selected (`0` if none, or a positive integer indicating the number of buffers).
+ * Example usage:
+ *   - This function can be used to peek into available buffers and select the necessary ones:
+ *     ```
+ *     int selected_buffers = io_buffers_peek(req, arg);
+ *     ```
+ *     In this example, `req` is the I/O request and `arg` contains the arguments for buffer selection.
+ */
+ int io_buffers_peek(struct io_kiocb *req, struct buf_sel_arg *arg)
+ {
+	 struct io_ring_ctx *ctx = req->ctx;
+	 struct io_buffer_list *bl;
+	 int ret;
+ 
+	 lockdep_assert_held(&ctx->uring_lock);
+ 
+	 bl = io_buffer_get_list(ctx, req->buf_index);
+	 if (unlikely(!bl))
+		 return -ENOENT;
+ 
+	 if (bl->flags & IOBL_BUF_RING) {
+		 ret = io_ring_buffers_peek(req, arg, bl);
+		 if (ret > 0)
+			 req->flags |= REQ_F_BUFFERS_COMMIT;
+		 return ret;
+	 }
+ 
+	 /* don't support multiple buffer selections for legacy */
+	 return io_provided_buffers_select(req, &arg->max_len, bl, arg->iovs);
+ }
+ 
 
 static inline bool __io_put_kbuf_ring(struct io_kiocb *req, int len, int nr)
 {
@@ -421,59 +471,110 @@ static void io_put_bl(struct io_ring_ctx *ctx, struct io_buffer_list *bl)
 	kfree(bl);
 }
 
-void io_destroy_buffers(struct io_ring_ctx *ctx)
-{
-	struct io_buffer_list *bl;
 
-	while (1) {
-		unsigned long index = 0;
-
-		scoped_guard(mutex, &ctx->mmap_lock) {
-			bl = xa_find(&ctx->io_bl_xa, &index, ULONG_MAX, XA_PRESENT);
-			if (bl)
-				xa_erase(&ctx->io_bl_xa, bl->bgid);
-		}
-		if (!bl)
-			break;
-		io_put_bl(ctx, bl);
-	}
-}
+/*
+ * Function: void io_destroy_buffers
+ * Description: This function is responsible for destroying all buffers associated with an I/O ring context. It iterates through the list of buffers, erases them from the index, and frees the allocated memory for each buffer in the context.
+ * Parameters:
+ *   - ctx: A pointer to the `io_ring_ctx` structure, representing the I/O ring context, which contains the buffers to be destroyed.
+ * Returns:
+ *   - This function does not return any value (`void`).
+ * Example usage:
+ *   - This function can be called when all buffers in a specific I/O ring context need to be cleaned up:
+ *     ```
+ *     io_destroy_buffers(ctx);
+ *     ```
+ *     Here, `ctx` is the I/O ring context whose buffers are to be destroyed.
+ */
+ void io_destroy_buffers(struct io_ring_ctx *ctx)
+ {
+	 struct io_buffer_list *bl;
+ 
+	 while (1) {
+		 unsigned long index = 0;
+ 
+		 scoped_guard(mutex, &ctx->mmap_lock) {
+			 bl = xa_find(&ctx->io_bl_xa, &index, ULONG_MAX, XA_PRESENT);
+			 if (bl)
+				 xa_erase(&ctx->io_bl_xa, bl->bgid);
+		 }
+		 if (!bl)
+			 break;
+		 io_put_bl(ctx, bl);
+	 }
+ }
+ 
 
 static void io_destroy_bl(struct io_ring_ctx *ctx, struct io_buffer_list *bl)
 {
-	scoped_guard(mutex, &ctx->mmap_lock)
+
+
+scoped_guard(mutex, &ctx->mmap_lock)
 		WARN_ON_ONCE(xa_erase(&ctx->io_bl_xa, bl->bgid) != bl);
 	io_put_bl(ctx, bl);
 }
 
-int io_remove_buffers_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
-{
-	struct io_provide_buf *p = io_kiocb_to_cmd(req, struct io_provide_buf);
-	u64 tmp;
 
-	if (sqe->rw_flags || sqe->addr || sqe->len || sqe->off ||
-	    sqe->splice_fd_in)
-		return -EINVAL;
+/*
+ * Function: int io_remove_buffers_prep
+ * Description: This function prepares the necessary information for removing buffers. It verifies the parameters in the submission queue entry (sqe) and sets up the buffer details required for removal.
+ * Parameters:
+ *   - req: A pointer to the `io_kiocb` structure, representing the I/O request control block.
+ *   - sqe: A pointer to the `io_uring_sqe` structure containing the submission queue entry, which holds the necessary parameters for the buffer removal.
+ * Returns:
+ *   - `0` if the preparation was successful; `-EINVAL` if any parameters are invalid.
+ * Example usage:
+ *   - This function is called to prepare the removal of buffers from an I/O request:
+ *     ```
+ *     int ret = io_remove_buffers_prep(req, sqe);
+ *     ```
+ *     Here, `req` represents the I/O request and `sqe` contains the submission parameters.
+ */
+ int io_remove_buffers_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+ {
+	 struct io_provide_buf *p = io_kiocb_to_cmd(req, struct io_provide_buf);
+	 u64 tmp;
+ 
+	 if (sqe->rw_flags || sqe->addr || sqe->len || sqe->off ||
+		 sqe->splice_fd_in)
+		 return -EINVAL;
+ 
+	 tmp = READ_ONCE(sqe->fd);
+	 if (!tmp || tmp > MAX_BIDS_PER_BGID)
+		 return -EINVAL;
+ 
+	 memset(p, 0, sizeof(*p));
+	 p->nbufs = tmp;
+	 p->bgid = READ_ONCE(sqe->buf_group);
+	 return 0;
+ }
+ 
 
-	tmp = READ_ONCE(sqe->fd);
-	if (!tmp || tmp > MAX_BIDS_PER_BGID)
-		return -EINVAL;
 
-	memset(p, 0, sizeof(*p));
-	p->nbufs = tmp;
-	p->bgid = READ_ONCE(sqe->buf_group);
-	return 0;
-}
-
+/*
+ * Function: int io_remove_buffers
+ * Description: This function removes buffers associated with an I/O request. It checks the provided buffer list and ensures that the removal is valid before proceeding with the buffer removal process.
+ * Parameters:
+ *   - req: A pointer to the `io_kiocb` structure, representing the I/O request control block.
+ *   - issue_flags: Flags that indicate the state of the I/O request.
+ * Returns:
+ *   - `0` if the buffers were successfully removed; a negative error code if the removal failed.
+ * Example usage:
+ *   - This function can be used to remove buffers after validating the conditions:
+ *     ```
+ *     int ret = io_remove_buffers(req, issue_flags);
+ *     ```
+ *     Here, `req` is the I/O request and `issue_flags` specify the status of the operation.
+ */
 int io_remove_buffers(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_provide_buf *p = io_kiocb_to_cmd(req, struct io_provide_buf);
 	struct io_ring_ctx *ctx = req->ctx;
 	struct io_buffer_list *bl;
 	int ret = 0;
-
+ 
 	io_ring_submit_lock(ctx, issue_flags);
-
+ 
 	ret = -ENOENT;
 	bl = io_buffer_get_list(ctx, p->bgid);
 	if (bl) {
@@ -483,47 +584,64 @@ int io_remove_buffers(struct io_kiocb *req, unsigned int issue_flags)
 			ret = __io_remove_buffers(ctx, bl, p->nbufs);
 	}
 	io_ring_submit_unlock(ctx, issue_flags);
-	if (ret < 0)
+ 	if (ret < 0)
 		req_set_fail(req);
 	io_req_set_res(req, ret, 0);
 	return IOU_OK;
 }
+ 
 
-int io_provide_buffers_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
-{
-	unsigned long size, tmp_check;
-	struct io_provide_buf *p = io_kiocb_to_cmd(req, struct io_provide_buf);
-	u64 tmp;
-
-	if (sqe->rw_flags || sqe->splice_fd_in)
-		return -EINVAL;
-
-	tmp = READ_ONCE(sqe->fd);
-	if (!tmp || tmp > MAX_BIDS_PER_BGID)
-		return -E2BIG;
-	p->nbufs = tmp;
-	p->addr = READ_ONCE(sqe->addr);
-	p->len = READ_ONCE(sqe->len);
-
-	if (check_mul_overflow((unsigned long)p->len, (unsigned long)p->nbufs,
-				&size))
-		return -EOVERFLOW;
-	if (check_add_overflow((unsigned long)p->addr, size, &tmp_check))
-		return -EOVERFLOW;
-
-	size = (unsigned long)p->len * p->nbufs;
-	if (!access_ok(u64_to_user_ptr(p->addr), size))
-		return -EFAULT;
-
-	p->bgid = READ_ONCE(sqe->buf_group);
-	tmp = READ_ONCE(sqe->off);
-	if (tmp > USHRT_MAX)
-		return -E2BIG;
-	if (tmp + p->nbufs > MAX_BIDS_PER_BGID)
-		return -EINVAL;
-	p->bid = tmp;
-	return 0;
-}
+/*
+ * Function: int io_provide_buffers_prep
+ * Description: This function prepares an I/O request to provide buffers. It processes the submission queue entry (sqe) and validates the parameters before proceeding with buffer allocation.
+ * Parameters:
+ *   - req: A pointer to the `io_kiocb` structure, representing the I/O request control block.
+ *   - sqe: A pointer to the `io_uring_sqe` structure containing the submission parameters.
+ * Returns:
+ *   - `0` if the preparation was successful; a negative error code if any parameter is invalid.
+ * Example usage:
+ *   - This function is called to prepare an I/O request for buffer provisioning:
+ *     ```
+ *     int ret = io_provide_buffers_prep(req, sqe);
+ *     ```
+ *     Here, `req` is the I/O request, and `sqe` contains the parameters for the operation.
+ */
+ int io_provide_buffers_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+ {
+	 unsigned long size, tmp_check;
+	 struct io_provide_buf *p = io_kiocb_to_cmd(req, struct io_provide_buf);
+	 u64 tmp;
+ 
+	 if (sqe->rw_flags || sqe->splice_fd_in)
+		 return -EINVAL;
+ 
+	 tmp = READ_ONCE(sqe->fd);
+	 if (!tmp || tmp > MAX_BIDS_PER_BGID)
+		 return -E2BIG;
+	 p->nbufs = tmp;
+	 p->addr = READ_ONCE(sqe->addr);
+	 p->len = READ_ONCE(sqe->len);
+ 
+	 if (check_mul_overflow((unsigned long)p->len, (unsigned long)p->nbufs,
+				 &size))
+		 return -EOVERFLOW;
+	 if (check_add_overflow((unsigned long)p->addr, size, &tmp_check))
+		 return -EOVERFLOW;
+ 
+	 size = (unsigned long)p->len * p->nbufs;
+	 if (!access_ok(u64_to_user_ptr(p->addr), size))
+		 return -EFAULT;
+ 
+	 p->bgid = READ_ONCE(sqe->buf_group);
+	 tmp = READ_ONCE(sqe->off);
+	 if (tmp > USHRT_MAX)
+		 return -E2BIG;
+	 if (tmp + p->nbufs > MAX_BIDS_PER_BGID)
+		 return -EINVAL;
+	 p->bid = tmp;
+	 return 0;
+ }
+ 
 
 static int io_add_buffers(struct io_ring_ctx *ctx, struct io_provide_buf *pbuf,
 			  struct io_buffer_list *bl)
@@ -550,179 +668,247 @@ static int io_add_buffers(struct io_ring_ctx *ctx, struct io_provide_buf *pbuf,
 	return i ? 0 : -ENOMEM;
 }
 
-int io_provide_buffers(struct io_kiocb *req, unsigned int issue_flags)
-{
-	struct io_provide_buf *p = io_kiocb_to_cmd(req, struct io_provide_buf);
-	struct io_ring_ctx *ctx = req->ctx;
-	struct io_buffer_list *bl;
-	int ret = 0;
 
-	io_ring_submit_lock(ctx, issue_flags);
+/*
+ * Function: int io_provide_buffers
+ * Description: This function handles the provisioning of buffers for an I/O request. It first locks the I/O ring context, checks if the buffer list exists, and if not, creates a new list. Then, it adds buffers to the list based on the provided request data.
+ * Parameters:
+ *   - req: A pointer to the `io_kiocb` structure, representing the I/O request control block.
+ *   - issue_flags: Flags that determine how the I/O request should be processed.
+ * Returns:
+ *   - `0` if the buffers were successfully provided; a negative error code if there was a failure.
+ * Example usage:
+ *   - This function is called to provide buffers in an I/O ring:
+ *     ```
+ *     int ret = io_provide_buffers(req, issue_flags);
+ *     ```
+ *     Here, `req` is the I/O request, and `issue_flags` specifies the status of the operation.
+ */
+ int io_provide_buffers(struct io_kiocb *req, unsigned int issue_flags)
+ {
+	 struct io_provide_buf *p = io_kiocb_to_cmd(req, struct io_provide_buf);
+	 struct io_ring_ctx *ctx = req->ctx;
+	 struct io_buffer_list *bl;
+	 int ret = 0;
+ 
+	 io_ring_submit_lock(ctx, issue_flags);
+ 
+	 bl = io_buffer_get_list(ctx, p->bgid);
+	 if (unlikely(!bl)) {
+		 bl = kzalloc(sizeof(*bl), GFP_KERNEL_ACCOUNT);
+		 if (!bl) {
+			 ret = -ENOMEM;
+			 goto err;
+		 }
+		 INIT_LIST_HEAD(&bl->buf_list);
+		 ret = io_buffer_add_list(ctx, bl, p->bgid);
+		 if (ret) {
+			 kfree(bl);
+			 goto err;
+		 }
+	 }
+	 /* can't add buffers via this command for a mapped buffer ring */
+	 if (bl->flags & IOBL_BUF_RING) {
+		 ret = -EINVAL;
+		 goto err;
+	 }
+ 
+	 ret = io_add_buffers(ctx, p, bl);
+ err:
+	 io_ring_submit_unlock(ctx, issue_flags);
+ 
+	 if (ret < 0)
+		 req_set_fail(req);
+	 io_req_set_res(req, ret, 0);
+	 return IOU_OK;
+ }
+ 
 
-	bl = io_buffer_get_list(ctx, p->bgid);
-	if (unlikely(!bl)) {
-		bl = kzalloc(sizeof(*bl), GFP_KERNEL_ACCOUNT);
-		if (!bl) {
-			ret = -ENOMEM;
-			goto err;
-		}
-		INIT_LIST_HEAD(&bl->buf_list);
-		ret = io_buffer_add_list(ctx, bl, p->bgid);
-		if (ret) {
-			kfree(bl);
-			goto err;
-		}
-	}
-	/* can't add buffers via this command for a mapped buffer ring */
-	if (bl->flags & IOBL_BUF_RING) {
-		ret = -EINVAL;
-		goto err;
-	}
 
-	ret = io_add_buffers(ctx, p, bl);
-err:
-	io_ring_submit_unlock(ctx, issue_flags);
+/*
+ * Function: int io_register_pbuf_ring
+ * Description: This function registers a provided buffer ring within the I/O ring context. It verifies the validity of the buffer group ID and other parameters, and then creates a new buffer ring or updates the existing one.
+ * Parameters:
+ *   - ctx: A pointer to the `io_ring_ctx` structure, representing the I/O ring context.
+ *   - arg: A pointer to the user-provided data that contains the configuration for the buffer ring.
+ * Returns:
+ *   - `0` if the buffer ring was successfully registered; a negative error code if there was a failure.
+ * Example usage:
+ *   - This function is used to register a new buffer ring in the I/O ring context:
+ *     ```
+ *     int ret = io_register_pbuf_ring(ctx, arg);
+ *     ```
+ *     Here, `ctx` is the I/O ring context, and `arg` contains the user data for the buffer ring configuration.
+ */
+ int io_register_pbuf_ring(struct io_ring_ctx *ctx, void __user *arg)
+ {
+	 struct io_uring_buf_reg reg;
+	 struct io_buffer_list *bl, *free_bl = NULL;
+	 struct io_uring_region_desc rd;
+	 struct io_uring_buf_ring *br;
+	 unsigned long mmap_offset;
+	 unsigned long ring_size;
+	 int ret;
+ 
+	 lockdep_assert_held(&ctx->uring_lock);
+ 
+	 if (copy_from_user(&reg, arg, sizeof(reg)))
+		 return -EFAULT;
+ 
+	 if (reg.resv[0] || reg.resv[1] || reg.resv[2])
+		 return -EINVAL;
+	 if (reg.flags & ~(IOU_PBUF_RING_MMAP | IOU_PBUF_RING_INC))
+		 return -EINVAL;
+	 if (!is_power_of_2(reg.ring_entries))
+		 return -EINVAL;
+	 /* cannot disambiguate full vs empty due to head/tail size */
+	 if (reg.ring_entries >= 65536)
+		 return -EINVAL;
+ 
+	 bl = io_buffer_get_list(ctx, reg.bgid);
+	 if (bl) {
+		 /* if mapped buffer ring OR classic exists, don't allow */
+		 if (bl->flags & IOBL_BUF_RING || !list_empty(&bl->buf_list))
+			 return -EEXIST;
+		 io_destroy_bl(ctx, bl);
+	 }
+ 
+	 free_bl = bl = kzalloc(sizeof(*bl), GFP_KERNEL);
+	 if (!bl)
+		 return -ENOMEM;
+ 
+	 mmap_offset = (unsigned long)reg.bgid << IORING_OFF_PBUF_SHIFT;
+	 ring_size = flex_array_size(br, bufs, reg.ring_entries);
+ 
+	 memset(&rd, 0, sizeof(rd));
+	 rd.size = PAGE_ALIGN(ring_size);
+	 if (!(reg.flags & IOU_PBUF_RING_MMAP)) {
+		 rd.user_addr = reg.ring_addr;
+		 rd.flags |= IORING_MEM_REGION_TYPE_USER;
+	 }
+	 ret = io_create_region_mmap_safe(ctx, &bl->region, &rd, mmap_offset);
+	 if (ret)
+		 goto fail;
+	 br = io_region_get_ptr(&bl->region);
+ 
+ #ifdef SHM_COLOUR
+	 /*
+	  * On platforms that have specific aliasing requirements, SHM_COLOUR
+	  * is set and we must guarantee that the kernel and user side align
+	  * nicely. We cannot do that if IOU_PBUF_RING_MMAP isn't set and
+	  * the application mmap's the provided ring buffer. Fail the request
+	  * if we, by chance, don't end up with aligned addresses. The app
+	  * should use IOU_PBUF_RING_MMAP instead, and liburing will handle
+	  * this transparently.
+	  */
+	 if (!(reg.flags & IOU_PBUF_RING_MMAP) &&
+		 ((reg.ring_addr | (unsigned long)br) & (SHM_COLOUR - 1))) {
+		 ret = -EINVAL;
+		 goto fail;
+	 }
+ #endif
+ 
+	 bl->nr_entries = reg.ring_entries;
+	 bl->mask = reg.ring_entries - 1;
+	 bl->flags |= IOBL_BUF_RING;
+	 bl->buf_ring = br;
+	 if (reg.flags & IOU_PBUF_RING_INC)
+		 bl->flags |= IOBL_INC;
+	 io_buffer_add_list(ctx, bl, reg.bgid);
+	 return 0;
+ fail:
+	 io_free_region(ctx, &bl->region);
+	 kfree(free_bl);
+	 return ret;
+ }
+ 
 
-	if (ret < 0)
-		req_set_fail(req);
-	io_req_set_res(req, ret, 0);
-	return IOU_OK;
-}
 
-int io_register_pbuf_ring(struct io_ring_ctx *ctx, void __user *arg)
-{
-	struct io_uring_buf_reg reg;
-	struct io_buffer_list *bl, *free_bl = NULL;
-	struct io_uring_region_desc rd;
-	struct io_uring_buf_ring *br;
-	unsigned long mmap_offset;
-	unsigned long ring_size;
-	int ret;
+/*
+ * Function: int io_unregister_pbuf_ring
+ * Description: This function unregisters a provided buffer ring from the I/O ring context. It removes the associated buffer ring and releases any resources allocated for it.
+ * Parameters:
+ *   - ctx: A pointer to the `io_ring_ctx` structure, representing the I/O ring context.
+ *   - arg: A pointer to the user-provided data containing the buffer group ID of the buffer ring to unregister.
+ * Returns:
+ *   - `0` if the buffer ring was successfully unregistered; a negative error code if there was a failure.
+ * Example usage:
+ *   - This function is used to unregister a buffer ring from the I/O ring context:
+ *     ```
+ *     int ret = io_unregister_pbuf_ring(ctx, arg);
+ *     ```
+ *     Here, `ctx` is the I/O ring context, and `arg` contains the user data for the buffer ring to be unregistered.
+ */
+ int io_unregister_pbuf_ring(struct io_ring_ctx *ctx, void __user *arg)
+ {
+	 struct io_uring_buf_reg reg;
+	 struct io_buffer_list *bl;
+ 
+	 lockdep_assert_held(&ctx->uring_lock);
+ 
+	 if (copy_from_user(&reg, arg, sizeof(reg)))
+		 return -EFAULT;
+	 if (reg.resv[0] || reg.resv[1] || reg.resv[2])
+		 return -EINVAL;
+	 if (reg.flags)
+		 return -EINVAL;
+ 
+	 bl = io_buffer_get_list(ctx, reg.bgid);
+	 if (!bl)
+		 return -ENOENT;
+	 if (!(bl->flags & IOBL_BUF_RING))
+		 return -EINVAL;
+ 
+	 scoped_guard(mutex, &ctx->mmap_lock)
+		 xa_erase(&ctx->io_bl_xa, bl->bgid);
+ 
+	 io_put_bl(ctx, bl);
+	 return 0;
+ }
+ 
 
-	lockdep_assert_held(&ctx->uring_lock);
 
-	if (copy_from_user(&reg, arg, sizeof(reg)))
-		return -EFAULT;
-
-	if (reg.resv[0] || reg.resv[1] || reg.resv[2])
-		return -EINVAL;
-	if (reg.flags & ~(IOU_PBUF_RING_MMAP | IOU_PBUF_RING_INC))
-		return -EINVAL;
-	if (!is_power_of_2(reg.ring_entries))
-		return -EINVAL;
-	/* cannot disambiguate full vs empty due to head/tail size */
-	if (reg.ring_entries >= 65536)
-		return -EINVAL;
-
-	bl = io_buffer_get_list(ctx, reg.bgid);
-	if (bl) {
-		/* if mapped buffer ring OR classic exists, don't allow */
-		if (bl->flags & IOBL_BUF_RING || !list_empty(&bl->buf_list))
-			return -EEXIST;
-		io_destroy_bl(ctx, bl);
-	}
-
-	free_bl = bl = kzalloc(sizeof(*bl), GFP_KERNEL);
-	if (!bl)
-		return -ENOMEM;
-
-	mmap_offset = (unsigned long)reg.bgid << IORING_OFF_PBUF_SHIFT;
-	ring_size = flex_array_size(br, bufs, reg.ring_entries);
-
-	memset(&rd, 0, sizeof(rd));
-	rd.size = PAGE_ALIGN(ring_size);
-	if (!(reg.flags & IOU_PBUF_RING_MMAP)) {
-		rd.user_addr = reg.ring_addr;
-		rd.flags |= IORING_MEM_REGION_TYPE_USER;
-	}
-	ret = io_create_region_mmap_safe(ctx, &bl->region, &rd, mmap_offset);
-	if (ret)
-		goto fail;
-	br = io_region_get_ptr(&bl->region);
-
-#ifdef SHM_COLOUR
-	/*
-	 * On platforms that have specific aliasing requirements, SHM_COLOUR
-	 * is set and we must guarantee that the kernel and user side align
-	 * nicely. We cannot do that if IOU_PBUF_RING_MMAP isn't set and
-	 * the application mmap's the provided ring buffer. Fail the request
-	 * if we, by chance, don't end up with aligned addresses. The app
-	 * should use IOU_PBUF_RING_MMAP instead, and liburing will handle
-	 * this transparently.
-	 */
-	if (!(reg.flags & IOU_PBUF_RING_MMAP) &&
-	    ((reg.ring_addr | (unsigned long)br) & (SHM_COLOUR - 1))) {
-		ret = -EINVAL;
-		goto fail;
-	}
-#endif
-
-	bl->nr_entries = reg.ring_entries;
-	bl->mask = reg.ring_entries - 1;
-	bl->flags |= IOBL_BUF_RING;
-	bl->buf_ring = br;
-	if (reg.flags & IOU_PBUF_RING_INC)
-		bl->flags |= IOBL_INC;
-	io_buffer_add_list(ctx, bl, reg.bgid);
-	return 0;
-fail:
-	io_free_region(ctx, &bl->region);
-	kfree(free_bl);
-	return ret;
-}
-
-int io_unregister_pbuf_ring(struct io_ring_ctx *ctx, void __user *arg)
-{
-	struct io_uring_buf_reg reg;
-	struct io_buffer_list *bl;
-
-	lockdep_assert_held(&ctx->uring_lock);
-
-	if (copy_from_user(&reg, arg, sizeof(reg)))
-		return -EFAULT;
-	if (reg.resv[0] || reg.resv[1] || reg.resv[2])
-		return -EINVAL;
-	if (reg.flags)
-		return -EINVAL;
-
-	bl = io_buffer_get_list(ctx, reg.bgid);
-	if (!bl)
-		return -ENOENT;
-	if (!(bl->flags & IOBL_BUF_RING))
-		return -EINVAL;
-
-	scoped_guard(mutex, &ctx->mmap_lock)
-		xa_erase(&ctx->io_bl_xa, bl->bgid);
-
-	io_put_bl(ctx, bl);
-	return 0;
-}
-
-int io_register_pbuf_status(struct io_ring_ctx *ctx, void __user *arg)
-{
-	struct io_uring_buf_status buf_status;
-	struct io_buffer_list *bl;
-	int i;
-
-	if (copy_from_user(&buf_status, arg, sizeof(buf_status)))
-		return -EFAULT;
-
-	for (i = 0; i < ARRAY_SIZE(buf_status.resv); i++)
-		if (buf_status.resv[i])
-			return -EINVAL;
-
-	bl = io_buffer_get_list(ctx, buf_status.buf_group);
-	if (!bl)
-		return -ENOENT;
-	if (!(bl->flags & IOBL_BUF_RING))
-		return -EINVAL;
-
-	buf_status.head = bl->head;
-	if (copy_to_user(arg, &buf_status, sizeof(buf_status)))
-		return -EFAULT;
-
-	return 0;
-}
+/*
+ * Function: int io_register_pbuf_status
+ * Description: This function retrieves the current status of the provided buffer ring, including the head of the buffer ring, and returns the information to the user.
+ * Parameters:
+ *   - ctx: A pointer to the `io_ring_ctx` structure, representing the I/O ring context.
+ *   - arg: A pointer to the user-provided data to store the buffer status.
+ * Returns:
+ *   - `0` if the buffer status was successfully retrieved; a negative error code if there was a failure.
+ * Example usage:
+ *   - This function is used to register and retrieve the status of a buffer ring:
+ *     ```
+ *     int ret = io_register_pbuf_status(ctx, arg);
+ *     ```
+ *     Here, `ctx` is the I/O ring context, and `arg` contains the user data for the buffer status.
+ */
+ int io_register_pbuf_status(struct io_ring_ctx *ctx, void __user *arg)
+ {
+	 struct io_uring_buf_status buf_status;
+	 struct io_buffer_list *bl;
+	 int i;
+ 
+	 if (copy_from_user(&buf_status, arg, sizeof(buf_status)))
+		 return -EFAULT;
+ 
+	 for (i = 0; i < ARRAY_SIZE(buf_status.resv); i++)
+		 if (buf_status.resv[i])
+			 return -EINVAL;
+ 
+	 bl = io_buffer_get_list(ctx, buf_status.buf_group);
+	 if (!bl)
+		 return -ENOENT;
+	 if (!(bl->flags & IOBL_BUF_RING))
+		 return -EINVAL;
+ 
+	 buf_status.head = bl->head;
+	 if (copy_to_user(arg, &buf_status, sizeof(buf_status)))
+		 return -EFAULT;
+ 
+	 return 0;
+ }
+ 
 
 struct io_mapped_region *io_pbuf_get_region(struct io_ring_ctx *ctx,
 					    unsigned int bgid)
@@ -736,3 +922,4 @@ struct io_mapped_region *io_pbuf_get_region(struct io_ring_ctx *ctx,
 		return NULL;
 	return &bl->region;
 }
+
