@@ -16,99 +16,163 @@
 #include "rsrc.h"
 #include "uring_cmd.h"
 
-void io_cmd_cache_free(const void *entry)
-{
-	struct io_async_cmd *ac = (struct io_async_cmd *)entry;
-
-	io_vec_free(&ac->vec);
-	kfree(ac);
-}
-
-static void io_req_uring_cleanup(struct io_kiocb *req, unsigned int issue_flags)
-{
-	struct io_uring_cmd *ioucmd = io_kiocb_to_cmd(req, struct io_uring_cmd);
-	struct io_async_cmd *ac = req->async_data;
-	struct io_uring_cmd_data *cache = &ac->data;
-
-	if (cache->op_data) {
-		kfree(cache->op_data);
-		cache->op_data = NULL;
-	}
-
-	if (issue_flags & IO_URING_F_UNLOCKED)
-		return;
-
-	io_alloc_cache_vec_kasan(&ac->vec);
-	if (ac->vec.nr > IO_VEC_CACHE_SOFT_CAP)
-		io_vec_free(&ac->vec);
-
-	if (io_alloc_cache_put(&req->ctx->cmd_cache, cache)) {
-		ioucmd->sqe = NULL;
-		req->async_data = NULL;
-		req->flags &= ~(REQ_F_ASYNC_DATA|REQ_F_NEED_CLEANUP);
-	}
-}
-
-void io_uring_cmd_cleanup(struct io_kiocb *req)
-{
-	io_req_uring_cleanup(req, 0);
-}
-
-bool io_uring_try_cancel_uring_cmd(struct io_ring_ctx *ctx,
-				   struct io_uring_task *tctx, bool cancel_all)
-{
-	struct hlist_node *tmp;
-	struct io_kiocb *req;
-	bool ret = false;
-
-	lockdep_assert_held(&ctx->uring_lock);
-
-	hlist_for_each_entry_safe(req, tmp, &ctx->cancelable_uring_cmd,
-			hash_node) {
-		struct io_uring_cmd *cmd = io_kiocb_to_cmd(req,
-				struct io_uring_cmd);
-		struct file *file = req->file;
-
-		if (!cancel_all && req->tctx != tctx)
-			continue;
-
-		if (cmd->flags & IORING_URING_CMD_CANCELABLE) {
-			file->f_op->uring_cmd(cmd, IO_URING_F_CANCEL |
-						   IO_URING_F_COMPLETE_DEFER);
-			ret = true;
-		}
-	}
-	io_submit_flush_completions(ctx);
-	return ret;
-}
-
-static void io_uring_cmd_del_cancelable(struct io_uring_cmd *cmd,
-		unsigned int issue_flags)
-{
-	struct io_kiocb *req = cmd_to_io_kiocb(cmd);
-	struct io_ring_ctx *ctx = req->ctx;
-
-	if (!(cmd->flags & IORING_URING_CMD_CANCELABLE))
-		return;
-
-	cmd->flags &= ~IORING_URING_CMD_CANCELABLE;
-	io_ring_submit_lock(ctx, issue_flags);
-	hlist_del(&req->hash_node);
-	io_ring_submit_unlock(ctx, issue_flags);
-}
-
 /*
- * Mark this command as concelable, then io_uring_try_cancel_uring_cmd()
- * will try to cancel this issued command by sending ->uring_cmd() with
- * issue_flags of IO_URING_F_CANCEL.
- *
- * The command is guaranteed to not be done when calling ->uring_cmd()
- * with IO_URING_F_CANCEL, but it is driver's responsibility to deal
- * with race between io_uring canceling and normal completion.
+ * Function: void io_cmd_cache_free
+ * Description: Fungsi ini digunakan untuk membebaskan sumber daya yang terkait dengan cache 
+ *              perintah I/O. Ini mencakup membebaskan buffer yang digunakan untuk menyimpan 
+ *              data asinkron dari perintah.
+ * Parameters:
+ *   - entry (const void*): Pointer ke entri yang akan dibebaskan, dalam hal ini, 
+ *     entri ini adalah perintah I/O asinkron yang membutuhkan pembebasan memori.
+ * Returns:
+ *   - Tidak mengembalikan nilai. Fungsi ini bertanggung jawab untuk membersihkan memori yang digunakan.
+ * Example usage:
+ *   - io_cmd_cache_free(entry);
  */
-void io_uring_cmd_mark_cancelable(struct io_uring_cmd *cmd,
-		unsigned int issue_flags)
+ void io_cmd_cache_free(const void *entry)
+ {
+	 struct io_async_cmd *ac = (struct io_async_cmd *)entry;
+ 
+	 io_vec_free(&ac->vec);
+	 kfree(ac);
+ }
+ 
+ /*
+  * Function: void io_req_uring_cleanup
+  * Description: Fungsi ini digunakan untuk membersihkan permintaan I/O (IO request) 
+  *              yang terkait dengan antrian uring. Ini termasuk membebaskan cache data 
+  *              yang digunakan oleh perintah I/O dan membersihkan referensi yang tersisa.
+  * Parameters:
+  *   - req (struct io_kiocb*): Pointer ke struktur kontrol I/O yang mewakili permintaan I/O.
+  *   - issue_flags (unsigned int): Flag yang menunjukkan opsi terkait operasi.
+  * Returns:
+  *   - Tidak mengembalikan nilai. Fungsi ini membersihkan memori yang digunakan oleh permintaan I/O.
+  * Example usage:
+  *   - io_req_uring_cleanup(req, issue_flags);
+  */
+ static void io_req_uring_cleanup(struct io_kiocb *req, unsigned int issue_flags)
+ {
+	 struct io_uring_cmd *ioucmd = io_kiocb_to_cmd(req, struct io_uring_cmd);
+	 struct io_async_cmd *ac = req->async_data;
+	 struct io_uring_cmd_data *cache = &ac->data;
+ 
+	 if (cache->op_data) {
+		 kfree(cache->op_data);
+		 cache->op_data = NULL;
+	 }
+ 
+	 if (issue_flags & IO_URING_F_UNLOCKED)
+		 return;
+ 
+	 io_alloc_cache_vec_kasan(&ac->vec);
+	 if (ac->vec.nr > IO_VEC_CACHE_SOFT_CAP)
+		 io_vec_free(&ac->vec);
+ 
+	 if (io_alloc_cache_put(&req->ctx->cmd_cache, cache)) {
+		 ioucmd->sqe = NULL;
+		 req->async_data = NULL;
+		 req->flags &= ~(REQ_F_ASYNC_DATA|REQ_F_NEED_CLEANUP);
+	 }
+ }
+ 
+ /*
+  * Function: void io_uring_cmd_cleanup
+  * Description: Fungsi ini digunakan untuk membersihkan perintah I/O yang terkait dengan uring.
+  * Parameters:
+  *   - req (struct io_kiocb*): Pointer ke struktur kontrol I/O yang mewakili permintaan I/O.
+  * Returns:
+  *   - Tidak mengembalikan nilai. Fungsi ini membersihkan perintah I/O yang terkait dengan permintaan I/O.
+  * Example usage:
+  *   - io_uring_cmd_cleanup(req);
+  */
+ void io_uring_cmd_cleanup(struct io_kiocb *req)
+ {
+	 io_req_uring_cleanup(req, 0);
+ }
+ 
+ /*
+  * Function: bool io_uring_try_cancel_uring_cmd
+  * Description: Fungsi ini mencoba untuk membatalkan perintah I/O yang terdaftar dalam uring. 
+  *              Jika perintah tersebut dapat dibatalkan, maka akan mengirimkan perintah pembatalan.
+  * Parameters:
+  *   - ctx (struct io_ring_ctx*): Pointer ke konteks uring yang berisi informasi tentang antrian I/O.
+  *   - tctx (struct io_uring_task*): Pointer ke tugas terkait dalam uring.
+  *   - cancel_all (bool): Flag untuk membatalkan semua perintah atau hanya yang terkait dengan tugas tertentu.
+  * Returns:
+  *   - bool: Mengembalikan true jika perintah berhasil dibatalkan, false jika tidak ada perintah yang dibatalkan.
+  * Example usage:
+  *   - bool canceled = io_uring_try_cancel_uring_cmd(ctx, tctx, true);
+  */
+ bool io_uring_try_cancel_uring_cmd(struct io_ring_ctx *ctx,
+					struct io_uring_task *tctx, bool cancel_all)
+ {
+	 struct hlist_node *tmp;
+	 struct io_kiocb *req;
+	 bool ret = false;
+ 
+	 lockdep_assert_held(&ctx->uring_lock);
+ 
+	 hlist_for_each_entry_safe(req, tmp, &ctx->cancelable_uring_cmd,
+			 hash_node) {
+		 struct io_uring_cmd *cmd = io_kiocb_to_cmd(req,
+				 struct io_uring_cmd);
+		 struct file *file = req->file;
+ 
+		 if (!cancel_all && req->tctx != tctx)
+			 continue;
+ 
+		 if (cmd->flags & IORING_URING_CMD_CANCELABLE) {
+			 file->f_op->uring_cmd(cmd, IO_URING_F_CANCEL |
+							IO_URING_F_COMPLETE_DEFER);
+			 ret = true;
+		 }
+	 }
+	 io_submit_flush_completions(ctx);
+	 return ret;
+ }
+ 
+ /*
+  * Function: void io_uring_cmd_del_cancelable
+  * Description: Fungsi ini menghapus perintah I/O dari antrian pembatalan jika perintah tersebut dapat dibatalkan.
+  * Parameters:
+  *   - cmd (struct io_uring_cmd*): Pointer ke perintah I/O yang akan dihapus dari antrian pembatalan.
+  *   - issue_flags (unsigned int): Flag terkait operasi.
+  * Returns:
+  *   - Tidak mengembalikan nilai. Fungsi ini menghapus perintah dari antrian pembatalan.
+  * Example usage:
+  *   - io_uring_cmd_del_cancelable(cmd, issue_flags);
+  */
+ static void io_uring_cmd_del_cancelable(struct io_uring_cmd *cmd,
+		 unsigned int issue_flags)
+ {
+	 struct io_kiocb *req = cmd_to_io_kiocb(cmd);
+	 struct io_ring_ctx *ctx = req->ctx;
+ 
+	 if (!(cmd->flags & IORING_URING_CMD_CANCELABLE))
+		 return;
+ 
+	 cmd->flags &= ~IORING_URING_CMD_CANCELABLE;
+	 io_ring_submit_lock(ctx, issue_flags);
+	 hlist_del(&req->hash_node);
+	 io_ring_submit_unlock(ctx, issue_flags);
+ }
+ 
+ /*
+  * Function: void io_uring_cmd_mark_cancelable
+  * Description: Fungsi ini menandai perintah I/O agar dapat dibatalkan di kemudian hari. 
+  *              Setelah ditandai, fungsi lain dapat mencoba membatalkan perintah tersebut.
+  * Parameters:
+  *   - cmd (struct io_uring_cmd*): Pointer ke perintah I/O yang akan ditandai sebagai dapat dibatalkan.
+  *   - issue_flags (unsigned int): Flag terkait operasi.
+  * Returns:
+  *   - Tidak mengembalikan nilai. Fungsi ini menandai perintah untuk dibatalkan.
+  * Example usage:
+  *   - io_uring_cmd_mark_cancelable(cmd, issue_flags);
+  */
+ void io_uring_cmd_mark_cancelable(struct io_uring_cmd *cmd,
+		 unsigned int issue_flags)
 {
+ 
 	struct io_kiocb *req = cmd_to_io_kiocb(cmd);
 	struct io_ring_ctx *ctx = req->ctx;
 
@@ -210,6 +274,19 @@ static int io_uring_cmd_prep_setup(struct io_kiocb *req,
 	return 0;
 }
 
+
+/*
+ * Function: int io_uring_cmd_prep
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_uring_cmd_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct io_uring_cmd *ioucmd = io_kiocb_to_cmd(req, struct io_uring_cmd);
@@ -228,6 +305,19 @@ int io_uring_cmd_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 
 	return io_uring_cmd_prep_setup(req, sqe);
 }
+
+
+/*
+ * Function: int io_uring_cmd
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 int io_uring_cmd(struct io_kiocb *req, unsigned int issue_flags)
 {
@@ -296,6 +386,19 @@ int io_uring_cmd_import_fixed_vec(struct io_uring_cmd *ioucmd,
 }
 EXPORT_SYMBOL_GPL(io_uring_cmd_import_fixed_vec);
 
+
+/*
+ * Function: void io_uring_cmd_issue_blocking
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 void io_uring_cmd_issue_blocking(struct io_uring_cmd *ioucmd)
 {
 	struct io_kiocb *req = cmd_to_io_kiocb(ioucmd);
@@ -351,6 +454,19 @@ static inline int io_uring_cmd_setsockopt(struct socket *sock,
 }
 
 #if defined(CONFIG_NET)
+
+/*
+ * Function: int io_uring_cmd_sock
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_uring_cmd_sock(struct io_uring_cmd *cmd, unsigned int issue_flags)
 {
 	struct socket *sock = cmd->file->private_data;
@@ -382,3 +498,4 @@ int io_uring_cmd_sock(struct io_uring_cmd *cmd, unsigned int issue_flags)
 }
 EXPORT_SYMBOL_GPL(io_uring_cmd_sock);
 #endif
+
