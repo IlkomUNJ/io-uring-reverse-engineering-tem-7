@@ -55,16 +55,32 @@ static int io_lock_external_ctx(struct io_ring_ctx *octx,
 	return 0;
 }
 
-void io_msg_ring_cleanup(struct io_kiocb *req)
-{
-	struct io_msg *msg = io_kiocb_to_cmd(req, struct io_msg);
 
-	if (WARN_ON_ONCE(!msg->src_file))
-		return;
-
-	fput(msg->src_file);
-	msg->src_file = NULL;
-}
+/*
+ * Function: void io_msg_ring_cleanup
+ * Description: This function performs cleanup for the I/O message ring. It checks if a source file (`src_file`) is associated with the message (`msg`). If the source file exists, it is released (using `fput`) and the `src_file` pointer is set to `NULL`. This function ensures that the resources related to the message are properly cleaned up.
+ * Parameters:
+ *   - req: A pointer to the `io_kiocb` structure representing the I/O request. The `io_kiocb` contains information related to the I/O operation, and this function uses it to access the `io_msg` associated with the request.
+ * Returns:
+ *   - This function does not return any value (`void`).
+ * Example usage:
+ *   - The function is called when the cleanup of an I/O message is required after processing. For example:
+ *     ```c
+ *     io_msg_ring_cleanup(req);
+ *     ```
+ *     Here, `req` refers to the I/O request containing the message that needs to be cleaned up.
+ */
+ void io_msg_ring_cleanup(struct io_kiocb *req)
+ {
+	 struct io_msg *msg = io_kiocb_to_cmd(req, struct io_msg);
+ 
+	 if (WARN_ON_ONCE(!msg->src_file))
+		 return;
+ 
+	 fput(msg->src_file);
+	 msg->src_file = NULL;
+ }
+ 
 
 static inline bool io_msg_need_remote(struct io_ring_ctx *target_ctx)
 {
@@ -295,63 +311,191 @@ static int __io_msg_ring_prep(struct io_msg *msg, const struct io_uring_sqe *sqe
 	return 0;
 }
 
-int io_msg_ring_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
-{
-	return __io_msg_ring_prep(io_kiocb_to_cmd(req, struct io_msg), sqe);
-}
 
-int io_msg_ring(struct io_kiocb *req, unsigned int issue_flags)
-{
-	struct io_msg *msg = io_kiocb_to_cmd(req, struct io_msg);
-	int ret;
+/*
+ * Function: int io_msg_ring_prep
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
 
-	ret = -EBADFD;
-	if (!io_is_uring_fops(req->file))
-		goto done;
 
-	switch (msg->cmd) {
-	case IORING_MSG_DATA:
-		ret = io_msg_ring_data(req, issue_flags);
-		break;
-	case IORING_MSG_SEND_FD:
-		ret = io_msg_send_fd(req, issue_flags);
-		break;
-	default:
-		ret = -EINVAL;
-		break;
-	}
+ int io_msg_ring_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+ {
+	 return __io_msg_ring_prep(io_kiocb_to_cmd(req, struct io_msg), sqe);
+ }
+ 
+ 
+ /*
+  * Function: int io_msg_ring
+  * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+  * Parameters:
+  *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+  * Returns:
+  *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+  * Example usage:
+  *   - [Berikan contoh penggunaan fungsi jika perlu]
+  */
+ 
+ 
+ int io_msg_ring(struct io_kiocb *req, unsigned int issue_flags)
+ {
+	 struct io_msg *msg = io_kiocb_to_cmd(req, struct io_msg);
+	 int ret;
+ 
+	 ret = -EBADFD;
+	 if (!io_is_uring_fops(req->file))
+		 goto done;
+ 
+	 switch (msg->cmd) {
+	 case IORING_MSG_DATA:
+		 ret = io_msg_ring_data(req, issue_flags);
+		 break;
+	 case IORING_MSG_SEND_FD:
+		 ret = io_msg_send_fd(req, issue_flags);
+		 break;
+	 default:
+		 ret = -EINVAL;
+		 break;
+	 }
+ 
+ done:
+	 if (ret < 0) {
+		 if (ret == -EAGAIN || ret == IOU_ISSUE_SKIP_COMPLETE)
+			 return ret;
+		 req_set_fail(req);
+	 }
+	 io_req_set_res(req, ret, 0);
+	 return IOU_OK;
+ }
+ 
+ /*
+  * Function: int io_uring_sync_msg_ring
+  * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+  * Parameters:
+  *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+  * Returns:
+  *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+  * Example usage:
+  *   - [Berikan contoh penggunaan fungsi jika perlu]
+  */
 
-done:
-	if (ret < 0) {
-		if (ret == -EAGAIN || ret == IOU_ISSUE_SKIP_COMPLETE)
-			return ret;
-		req_set_fail(req);
-	}
-	io_req_set_res(req, ret, 0);
-	return IOU_OK;
-}
+ int io_uring_sync_msg_ring(struct io_uring_sqe *sqe)
+ {
+	 struct io_msg io_msg = { };
+	 int ret;
+ 
+	 ret = __io_msg_ring_prep(&io_msg, sqe);
+	 if (unlikely(ret))
+		 return ret;
+ 
+	 /*
+	  * Only data sending supported, not IORING_MSG_SEND_FD as that one
+	  * doesn't make sense without a source ring to send files from.
+	  */
+	 if (io_msg.cmd != IORING_MSG_DATA)
+		 return -EINVAL;
+ 
+	 CLASS(fd, f)(sqe->fd);
+	 if (fd_empty(f))
+		 return -EBADF;
+	 if (!io_is_uring_fops(fd_file(f)))
+		 return -EBADFD;
+	 return  __io_msg_ring_data(fd_file(f)->private_data,
+					&io_msg, IO_URING_F_UNLOCKED);
+ }
 
-int io_uring_sync_msg_ring(struct io_uring_sqe *sqe)
-{
-	struct io_msg io_msg = { };
-	int ret;
+/*
+ * Function: int io_msg_ring
+ * Description: This function handles the execution of different I/O message ring commands. It checks the command type (`cmd`) in the `io_msg` and processes it accordingly. For `IORING_MSG_DATA`, it calls the `io_msg_ring_data` function, and for `IORING_MSG_SEND_FD`, it calls the `io_msg_send_fd` function. If the command is unrecognized, it returns an error.
+ * Parameters:
+ *   - req: A pointer to the `io_kiocb` structure, representing the I/O request. It is used to extract the `io_msg` command and perform operations based on the command.
+ *   - issue_flags: Flags used for managing the issue and execution of the I/O request.
+ * Returns:
+ *   - On success: It returns `IOU_OK`.
+ *   - On failure: It returns an error code like `-EBADFD`, `-EINVAL`, or others based on the specific condition.
+ * Example usage:
+ *   - This function is invoked to execute the I/O message ring command, like so:
+ *     ```c
+ *     ret = io_msg_ring(req, issue_flags);
+ *     ```
+ *     Here, `req` is the I/O request containing the message, and `issue_flags` control how the operation is handled.
+ */
+ int io_msg_ring(struct io_kiocb *req, unsigned int issue_flags)
+ {
+	 struct io_msg *msg = io_kiocb_to_cmd(req, struct io_msg);
+	 int ret;
+ 
+	 ret = -EBADFD;
+	 if (!io_is_uring_fops(req->file))
+		 goto done;
+ 
+	 switch (msg->cmd) {
+	 case IORING_MSG_DATA:
+		 ret = io_msg_ring_data(req, issue_flags);
+		 break;
+	 case IORING_MSG_SEND_FD:
+		 ret = io_msg_send_fd(req, issue_flags);
+		 break;
+	 default:
+		 ret = -EINVAL;
+		 break;
+	 }
+ 
+ done:
+	 if (ret < 0) {
+		 if (ret == -EAGAIN || ret == IOU_ISSUE_SKIP_COMPLETE)
+			 return ret;
+		 req_set_fail(req);
+	 }
+	 io_req_set_res(req, ret, 0);
+	 return IOU_OK;
+ }
+ 
 
-	ret = __io_msg_ring_prep(&io_msg, sqe);
-	if (unlikely(ret))
-		return ret;
 
-	/*
-	 * Only data sending supported, not IORING_MSG_SEND_FD as that one
-	 * doesn't make sense without a source ring to send files from.
-	 */
-	if (io_msg.cmd != IORING_MSG_DATA)
-		return -EINVAL;
+/*
+ * Function: int io_uring_sync_msg_ring
+ * Description: This function prepares the I/O message ring for synchronous processing. It validates the `sqe` and processes the `IORING_MSG_DATA` command by calling the appropriate internal functions. It ensures that only valid operations are processed and returns appropriate error codes when necessary.
+ * Parameters:
+ *   - sqe: A pointer to the `io_uring_sqe` structure, representing the submission queue entry.
+ * Returns:
+ *   - On success: Returns `0` or a valid result.
+ *   - On failure: Returns an error code such as `-EINVAL`, `-EAGAIN`, or others.
+ * Example usage:
+ *   - This function is used when synchronously handling a message ring operation in the I/O queue. For instance:
+ *     ```c
+ *     ret = io_uring_sync_msg_ring(sqe);
+ *     ```
+ *     Here, `sqe` is the submission queue entry containing the necessary data for the operation.
+ */
+ int io_uring_sync_msg_ring(struct io_uring_sqe *sqe)
+ {
+	 struct io_msg io_msg = { };
+	 int ret;
+ 
+	 ret = __io_msg_ring_prep(&io_msg, sqe);
+	 if (unlikely(ret))
+		 return ret;
+ 
+	 /*
+	  * Only data sending supported, not IORING_MSG_SEND_FD as that one
+	  * doesn't make sense without a source ring to send files from.
+	  */
+	 if (io_msg.cmd != IORING_MSG_DATA)
+		 return -EINVAL;
+ 
+	 CLASS(fd, f)(sqe->fd);
+	 if (fd_empty(f))
+		 return -EBADF;
+	 if (!io_is_uring_fops(fd_file(f)))
+		 return -EBADFD;
+	 return  __io_msg_ring_data(fd_file(f)->private_data,
+								&io_msg, IO_URING_F_UNLOCKED);
+ }
+ 
 
-	CLASS(fd, f)(sqe->fd);
-	if (fd_empty(f))
-		return -EBADF;
-	if (!io_is_uring_fops(fd_file(f)))
-		return -EBADFD;
-	return  __io_msg_ring_data(fd_file(f)->private_data,
-				   &io_msg, IO_URING_F_UNLOCKED);
-}
