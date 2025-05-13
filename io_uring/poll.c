@@ -312,50 +312,65 @@ static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 	return IOU_POLL_NO_ACTION;
 }
 
-void io_poll_task_func(struct io_kiocb *req, io_tw_token_t tw)
-{
-	int ret;
 
-	ret = io_poll_check_events(req, tw);
-	if (ret == IOU_POLL_NO_ACTION) {
-		io_kbuf_recycle(req, 0);
-		return;
-	} else if (ret == IOU_POLL_REQUEUE) {
-		io_kbuf_recycle(req, 0);
-		__io_poll_execute(req, 0);
-		return;
-	}
-	io_poll_remove_entries(req);
-	/* task_work always has ->uring_lock held */
-	hash_del(&req->hash_node);
+/*
+ * Function: void io_poll_task_func
+ * Description: This function handles the polling task logic for I/O operations. It checks the events associated 
+ * with the I/O request, handles requeueing or completion based on the event, and manages the request's state accordingly.
+ * Parameters:
+ *   - req: A pointer to the I/O control block (io_kiocb) representing the I/O request.
+ *   - tw: The token associated with the task work (io_tw_token_t), which represents the state of the task.
+ * Returns:
+ *   - This function doesn't return any value. It modifies the state of the I/O request and completes or defers it based on the result.
+ * Example usage:
+ *   - io_poll_task_func(req, tw);
+ */
 
-	if (req->opcode == IORING_OP_POLL_ADD) {
-		if (ret == IOU_POLL_DONE) {
-			struct io_poll *poll;
-
-			poll = io_kiocb_to_cmd(req, struct io_poll);
-			req->cqe.res = mangle_poll(req->cqe.res & poll->events);
-		} else if (ret == IOU_POLL_REISSUE) {
-			io_req_task_submit(req, tw);
-			return;
-		} else if (ret != IOU_POLL_REMOVE_POLL_USE_RES) {
-			req->cqe.res = ret;
-			req_set_fail(req);
-		}
-
-		io_req_set_res(req, req->cqe.res, 0);
-		io_req_task_complete(req, tw);
-	} else {
-		io_tw_lock(req->ctx, tw);
-
-		if (ret == IOU_POLL_REMOVE_POLL_USE_RES)
-			io_req_task_complete(req, tw);
-		else if (ret == IOU_POLL_DONE || ret == IOU_POLL_REISSUE)
-			io_req_task_submit(req, tw);
-		else
-			io_req_defer_failed(req, ret);
-	}
-}
+ void io_poll_task_func(struct io_kiocb *req, io_tw_token_t tw)
+ {
+	 int ret;
+ 
+	 ret = io_poll_check_events(req, tw);
+	 if (ret == IOU_POLL_NO_ACTION) {
+		 io_kbuf_recycle(req, 0);
+		 return;
+	 } else if (ret == IOU_POLL_REQUEUE) {
+		 io_kbuf_recycle(req, 0);
+		 __io_poll_execute(req, 0);
+		 return;
+	 }
+	 io_poll_remove_entries(req);
+	 /* task_work always has ->uring_lock held */
+	 hash_del(&req->hash_node);
+ 
+	 if (req->opcode == IORING_OP_POLL_ADD) {
+		 if (ret == IOU_POLL_DONE) {
+			 struct io_poll *poll;
+ 
+			 poll = io_kiocb_to_cmd(req, struct io_poll);
+			 req->cqe.res = mangle_poll(req->cqe.res & poll->events);
+		 } else if (ret == IOU_POLL_REISSUE) {
+			 io_req_task_submit(req, tw);
+			 return;
+		 } else if (ret != IOU_POLL_REMOVE_POLL_USE_RES) {
+			 req->cqe.res = ret;
+			 req_set_fail(req);
+		 }
+ 
+		 io_req_set_res(req, req->cqe.res, 0);
+		 io_req_task_complete(req, tw);
+	 } else {
+		 io_tw_lock(req->ctx, tw);
+ 
+		 if (ret == IOU_POLL_REMOVE_POLL_USE_RES)
+			 io_req_task_complete(req, tw);
+		 else if (ret == IOU_POLL_DONE || ret == IOU_POLL_REISSUE)
+			 io_req_task_submit(req, tw);
+		 else
+			 io_req_defer_failed(req, ret);
+	 }
+ }
+ 
 
 static void io_poll_cancel_req(struct io_kiocb *req)
 {
@@ -521,7 +536,21 @@ static void io_poll_queue_proc(struct file *file, struct wait_queue_head *head,
 			(struct io_poll **) &pt->req->async_data);
 }
 
-static bool io_poll_can_finish_inline(struct io_kiocb *req,
+static bool 
+/*
+ * Function: io_poll_can_finish_inline
+ * Description: This function checks if a poll request can be finished inline, depending on the ownership of the poll table (ipt). 
+ * If the poll table has ownership, the request can finish inline, otherwise, it cannot.
+ * Parameters:
+ *   - req: A pointer to the I/O control block (`io_kiocb`) representing the poll request.
+ *   - pt: A pointer to the `io_poll_table` structure that holds information about the poll request.
+ * Returns:
+ *   - `true` if the poll request can finish inline, `false` otherwise.
+ * Example usage:
+ *   - io_poll_can_finish_inline(req, pt);
+ */
+
+io_poll_can_finish_inline(struct io_kiocb *req,
 				      struct io_poll_table *pt)
 {
 	return pt->owning || io_poll_get_ownership(req);
@@ -565,7 +594,22 @@ static int __io_arm_poll_handler(struct io_kiocb *req,
 	 *
 	 * Note: even though the request won't be completed/freed, without
 	 * ownership we still can race with io_poll_wake().
-	 * io_poll_can_finish_inline() tries to deal with that.
+	 * 
+
+/*
+ * Function: io_poll_can_finish_inline
+ * Description: This function checks whether the poll request can be completed inline. It checks the ownership of the poll table (`ipt`) to determine if the request can finish inline or if further processing is required.
+ * Parameters:
+ *   - req: A pointer to the I/O control block (`io_kiocb`) representing the poll request. This structure contains the request's state and data.
+ *   - pt: A pointer to the `io_poll_table` structure that holds information about the poll request's state and ownership.
+ * Returns:
+ *   - `true` if the poll request can finish inline (i.e., the poll table has ownership or the request has ownership).
+ *   - `false` otherwise.
+ * Example usage:
+ *   - bool can_finish = io_poll_can_finish_inline(req, pt);
+ */
+ 
+io_poll_can_finish_inline() tries to deal with that.
 	 */
 	ipt->owning = issue_flags & IO_URING_F_UNLOCKED;
 	atomic_set(&req->poll_refs, (int)ipt->owning);
@@ -585,7 +629,19 @@ static int __io_arm_poll_handler(struct io_kiocb *req,
 	if (unlikely(ipt->error || !ipt->nr_entries)) {
 		io_poll_remove_entries(req);
 
-		if (!io_poll_can_finish_inline(req, ipt)) {
+		if (!
+
+/*
+ * Function: io_poll_can_finish_inline
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+io_poll_can_finish_inline(req, ipt)) {
 			io_poll_mark_cancelled(req);
 			return 0;
 		} else if (mask && (poll->events & EPOLLET)) {
@@ -597,7 +653,19 @@ static int __io_arm_poll_handler(struct io_kiocb *req,
 
 	if (mask &&
 	   ((poll->events & (EPOLLET|EPOLLONESHOT)) == (EPOLLET|EPOLLONESHOT))) {
-		if (!io_poll_can_finish_inline(req, ipt)) {
+		if (!
+
+/*
+ * Function: io_poll_can_finish_inline
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+io_poll_can_finish_inline(req, ipt)) {
 			io_poll_add_hash(req, issue_flags);
 			return 0;
 		}
@@ -610,7 +678,9 @@ static int __io_arm_poll_handler(struct io_kiocb *req,
 	io_poll_add_hash(req, issue_flags);
 
 	if (mask && (poll->events & EPOLLET) &&
-	    io_poll_can_finish_inline(req, ipt)) {
+	    
+
+io_poll_can_finish_inline(req, ipt)) {
 		__io_poll_execute(req, mask);
 		return 0;
 	}
@@ -668,6 +738,19 @@ static struct async_poll *io_req_alloc_apoll(struct io_kiocb *req,
 		return NULL;
 	return apoll;
 }
+
+
+/*
+ * Function: int io_arm_poll_handler
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 int io_arm_poll_handler(struct io_kiocb *req, unsigned issue_flags)
 {
@@ -729,7 +812,20 @@ __cold bool io_poll_remove_all(struct io_ring_ctx *ctx, struct io_uring_task *tc
 	for (i = 0; i < nr_buckets; i++) {
 		struct io_hash_bucket *hb = &ctx->cancel_table.hbs[i];
 
-		hlist_for_each_entry_safe(req, tmp, &hb->list, hash_node) {
+		
+/*
+ * Function: hlist_for_each_entry_safe
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
+hlist_for_each_entry_safe(req, tmp, &hb->list, hash_node) {
 			if (io_match_task_safe(req, tctx, cancel_all)) {
 				hlist_del_init(&req->hash_node);
 				io_poll_cancel_req(req);
@@ -747,7 +843,20 @@ static struct io_kiocb *io_poll_find(struct io_ring_ctx *ctx, bool poll_only,
 	u32 index = hash_long(cd->data, ctx->cancel_table.hash_bits);
 	struct io_hash_bucket *hb = &ctx->cancel_table.hbs[index];
 
-	hlist_for_each_entry(req, &hb->list, hash_node) {
+	
+
+
+/*
+ * Function: hlist_for_each_entry
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+hlist_for_each_entry(req, &hb->list, hash_node) {
 		if (cd->data != req->cqe.user_data)
 			continue;
 		if (poll_only && req->opcode != IORING_OP_POLL_ADD)
@@ -771,7 +880,19 @@ static struct io_kiocb *io_poll_file_find(struct io_ring_ctx *ctx,
 	for (i = 0; i < nr_buckets; i++) {
 		struct io_hash_bucket *hb = &ctx->cancel_table.hbs[i];
 
-		hlist_for_each_entry(req, &hb->list, hash_node) {
+		
+
+/*
+ * Function: hlist_for_each_entry
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+hlist_for_each_entry(req, &hb->list, hash_node) {
 			if (io_cancel_req_match(req, cd))
 				return req;
 		}
@@ -835,6 +956,19 @@ static __poll_t io_poll_parse_events(const struct io_uring_sqe *sqe,
 		(events & (EPOLLEXCLUSIVE|EPOLLONESHOT|EPOLLET));
 }
 
+
+/*
+ * Function: int io_poll_remove_prep
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_poll_remove_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct io_poll_update *upd = io_kiocb_to_cmd(req, struct io_poll_update);
@@ -865,6 +999,19 @@ int io_poll_remove_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	return 0;
 }
 
+
+/*
+ * Function: int io_poll_add_prep
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_poll_add_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct io_poll *poll = io_kiocb_to_cmd(req, struct io_poll);
@@ -882,6 +1029,18 @@ int io_poll_add_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	return 0;
 }
 
+
+/*
+ * Function: int io_poll_add
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 int io_poll_add(struct io_kiocb *req, unsigned int issue_flags)
 {
 	struct io_poll *poll = io_kiocb_to_cmd(req, struct io_poll);
@@ -897,6 +1056,19 @@ int io_poll_add(struct io_kiocb *req, unsigned int issue_flags)
 	}
 	return ret ?: IOU_ISSUE_SKIP_COMPLETE;
 }
+
+
+/*
+ * Function: int io_poll_remove
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 int io_poll_remove(struct io_kiocb *req, unsigned int issue_flags)
 {
@@ -950,3 +1122,4 @@ out:
 	io_req_set_res(req, ret, 0);
 	return IOU_OK;
 }
+
