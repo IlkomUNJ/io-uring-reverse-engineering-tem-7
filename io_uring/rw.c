@@ -320,15 +320,48 @@ static int io_prep_rw(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 	return io_rw_do_import(req, ddir);
 }
 
-int io_prep_read(struct io_kiocb *req, const struct io_uring_sqe *sqe)
-{
-	return io_prep_rw(req, sqe, ITER_DEST);
-}
-
-int io_prep_write(struct io_kiocb *req, const struct io_uring_sqe *sqe)
-{
-	return io_prep_rw(req, sqe, ITER_SOURCE);
-}
+/*
+ * Function: int io_prep_read
+ * Description: This function prepares a read operation for I/O processing. It calls the generic `io_prep_rw` function to set up the request with the proper iteration type for reading data into a destination buffer.
+ * Parameters:
+ *   - req: A pointer to the `io_kiocb` structure, which represents the I/O control block for the request.
+ *   - sqe: A pointer to the `io_uring_sqe` structure, which represents the submission queue entry containing the request details.
+ * Returns:
+ *   - `int`: This function returns the result of the `io_prep_rw` function call. Typically, it returns 0 on success or a negative error code if something goes wrong.
+ * Example usage:
+ *   - int ret = io_prep_read(req, sqe);  // Prepares a read operation based on the request and submission queue entry.
+ *     if (ret == 0) {
+ *         // Read operation is prepared successfully.
+ *     } else {
+ *         // Handle error.
+ *     }
+ */
+ int io_prep_read(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+ {
+	 return io_prep_rw(req, sqe, ITER_DEST);
+ }
+ 
+ /*
+  * Function: int io_prep_write
+  * Description: This function prepares a write operation for I/O processing. It calls the generic `io_prep_rw` function to set up the request with the proper iteration type for writing data from a source buffer.
+  * Parameters:
+  *   - req: A pointer to the `io_kiocb` structure, which represents the I/O control block for the request.
+  *   - sqe: A pointer to the `io_uring_sqe` structure, which represents the submission queue entry containing the request details.
+  * Returns:
+  *   - `int`: This function returns the result of the `io_prep_rw` function call. Typically, it returns 0 on success or a negative error code if something goes wrong.
+  * Example usage:
+  *   - int ret = io_prep_write(req, sqe);  // Prepares a write operation based on the request and submission queue entry.
+  *     if (ret == 0) {
+  *         // Write operation is prepared successfully.
+  *     } else {
+  *         // Handle error.
+  *     }
+  */
+ int io_prep_write(struct io_kiocb *req, const struct io_uring_sqe *sqe)
+ {
+	 return io_prep_rw(req, sqe, ITER_SOURCE);
+ }
+ 
 
 static int io_prep_rwv(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 		       int ddir)
@@ -348,10 +381,34 @@ static int io_prep_rwv(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 	return io_iov_buffer_select_prep(req);
 }
 
+
+/*
+ * Function: int io_prep_readv
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 int io_prep_readv(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	return io_prep_rwv(req, sqe, ITER_DEST);
 }
+
+
+/*
+ * Function: int io_prep_writev
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
 
 int io_prep_writev(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
@@ -374,10 +431,36 @@ static int io_init_rw_fixed(struct io_kiocb *req, unsigned int issue_flags,
 	return ret;
 }
 
+
+/*
+ * Function: int io_prep_read_fixed
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_prep_read_fixed(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	return __io_prep_rw(req, sqe, ITER_DEST);
 }
+
+
+/*
+ * Function: int io_prep_write_fixed
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 int io_prep_write_fixed(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
@@ -411,6 +494,19 @@ static int io_rw_prep_reg_vec(struct io_kiocb *req)
 	return io_prep_reg_iovec(req, &io->vec, uvec, rw->len);
 }
 
+
+/*
+ * Function: int io_prep_readv_fixed
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_prep_readv_fixed(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	int ret;
@@ -420,6 +516,19 @@ int io_prep_readv_fixed(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 		return ret;
 	return io_rw_prep_reg_vec(req);
 }
+
+
+/*
+ * Function: int io_prep_writev_fixed
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 int io_prep_writev_fixed(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
@@ -435,6 +544,19 @@ int io_prep_writev_fixed(struct io_kiocb *req, const struct io_uring_sqe *sqe)
  * Multishot read is prepared just like a normal read/write request, only
  * difference is that we set the MULTISHOT flag.
  */
+
+/*
+ * Function: int io_read_mshot_prep
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_read_mshot_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct io_rw *rw = io_kiocb_to_cmd(req, struct io_rw);
@@ -454,6 +576,19 @@ int io_read_mshot_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	req->flags |= REQ_F_APOLL_MULTISHOT;
 	return 0;
 }
+
+
+/*
+ * Function: void io_readv_writev_cleanup
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 void io_readv_writev_cleanup(struct io_kiocb *req)
 {
@@ -557,6 +692,19 @@ static inline int io_fixup_rw_res(struct io_kiocb *req, long res)
 	}
 	return res;
 }
+
+
+/*
+ * Function: void io_req_rw_complete
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 void io_req_rw_complete(struct io_kiocb *req, io_tw_token_t tw)
 {
@@ -1009,6 +1157,19 @@ done:
 	return ret;
 }
 
+
+/*
+ * Function: int io_read
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_read(struct io_kiocb *req, unsigned int issue_flags)
 {
 	int ret;
@@ -1019,6 +1180,19 @@ int io_read(struct io_kiocb *req, unsigned int issue_flags)
 
 	return ret;
 }
+
+
+/*
+ * Function: int io_read_mshot
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 int io_read_mshot(struct io_kiocb *req, unsigned int issue_flags)
 {
@@ -1104,6 +1278,19 @@ static bool io_kiocb_start_write(struct io_kiocb *req, struct kiocb *kiocb)
 		__sb_writers_release(inode->i_sb, SB_FREEZE_WRITE);
 	return ret;
 }
+
+
+/*
+ * Function: int io_write
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 int io_write(struct io_kiocb *req, unsigned int issue_flags)
 {
@@ -1201,6 +1388,18 @@ ret_eagain:
 	}
 }
 
+
+/*
+ * Function: int io_read_fixed
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 int io_read_fixed(struct io_kiocb *req, unsigned int issue_flags)
 {
 	int ret;
@@ -1212,6 +1411,19 @@ int io_read_fixed(struct io_kiocb *req, unsigned int issue_flags)
 	return io_read(req, issue_flags);
 }
 
+
+/*
+ * Function: int io_write_fixed
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_write_fixed(struct io_kiocb *req, unsigned int issue_flags)
 {
 	int ret;
@@ -1222,6 +1434,19 @@ int io_write_fixed(struct io_kiocb *req, unsigned int issue_flags)
 
 	return io_write(req, issue_flags);
 }
+
+
+/*
+ * Function: void io_rw_fail
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
 
 void io_rw_fail(struct io_kiocb *req)
 {
@@ -1303,6 +1528,19 @@ static int io_uring_hybrid_poll(struct io_kiocb *req,
 	return ret;
 }
 
+
+/*
+ * Function: int io_do_iopoll
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 int io_do_iopoll(struct io_ring_ctx *ctx, bool force_nonspin)
 {
 	struct io_wq_work_node *pos, *start, *prev;
@@ -1317,7 +1555,20 @@ int io_do_iopoll(struct io_ring_ctx *ctx, bool force_nonspin)
 	if (ctx->poll_multi_queue || force_nonspin)
 		poll_flags |= BLK_POLL_ONESHOT;
 
-	wq_list_for_each(pos, start, &ctx->iopoll_list) {
+	
+/*
+ * Function: wq_list_for_each
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
+wq_list_for_each(pos, start, &ctx->iopoll_list) {
 		struct io_kiocb *req = container_of(pos, struct io_kiocb, comp_list);
 		int ret;
 
@@ -1351,7 +1602,20 @@ int io_do_iopoll(struct io_ring_ctx *ctx, bool force_nonspin)
 		return 0;
 
 	prev = start;
-	wq_list_for_each_resume(pos, prev) {
+	
+/*
+ * Function: wq_list_for_each_resume
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
+wq_list_for_each_resume(pos, prev) {
 		struct io_kiocb *req = container_of(pos, struct io_kiocb, comp_list);
 
 		/* order with io_complete_rw_iopoll(), e.g. ->result updates */
@@ -1375,6 +1639,19 @@ int io_do_iopoll(struct io_ring_ctx *ctx, bool force_nonspin)
 	return nr_events;
 }
 
+
+/*
+ * Function: void io_rw_cache_free
+ * Description: [Masukkan penjelasan singkat mengenai apa yang dilakukan oleh fungsi ini.]
+ * Parameters:
+ *   - [Masukkan nama parameter dan tipe data serta deskripsi jika ada]
+ * Returns:
+ *   - [Jelaskan tipe data yang dikembalikan dan kondisinya]
+ * Example usage:
+ *   - [Berikan contoh penggunaan fungsi jika perlu]
+ */
+
+
 void io_rw_cache_free(const void *entry)
 {
 	struct io_async_rw *rw = (struct io_async_rw *) entry;
@@ -1382,3 +1659,4 @@ void io_rw_cache_free(const void *entry)
 	io_vec_free(&rw->vec);
 	kfree(rw);
 }
+
